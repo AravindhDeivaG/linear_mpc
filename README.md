@@ -58,7 +58,18 @@ x_{k+1} = A x_k + B u_k
 $$
 
 $$
-A = \begin{bmatrix} 1 & 0 & dt & 0 \\ 0 & 1 & 0 & dt \\ 0 & 0 & 1 & 0 \\ 0 & 0 & 0 & 1 \end{bmatrix}, \quad B = \begin{bmatrix} 0.5 dt^2 & 0 \\ 0 & 0.5 dt^2 \\ dt & 0 \\ 0 & dt \end{bmatrix}
+A = \begin{bmatrix}
+1 & 0 & dt & 0 \\\\
+0 & 1 & 0 & dt \\\\
+0 & 0 & 1 & 0 \\\\
+0 & 0 & 0 & 1
+\end{bmatrix}, \quad
+B = \begin{bmatrix}
+0.5 dt^2 & 0 \\\\
+0 & 0.5 dt^2 \\\\
+dt & 0 \\\\
+0 & dt
+\end{bmatrix}
 $$
 
 ### Condensed Model Formulation
@@ -71,18 +82,37 @@ $$
 where:
 
 $$
-X = {\begin{bmatrix} x_1 \\ x_2 \\ \vdots \\ x_N \end{bmatrix}}_{4N \times 1}, \quad U = {\begin{bmatrix} u_0 \\ u_1 \\ \vdots \\ u_{N-1} \end{bmatrix}}_{2N \times 1}
+X = {\begin{bmatrix}
+x_1 \\\\
+x_2 \\\\
+\vdots \\\\
+x_N
+\end{bmatrix}}_{4N \times 1}, \quad
+U = {\begin{bmatrix}
+u_0 \\\\
+u_1 \\\\
+\vdots \\\\
+u_{N-1}
+\end{bmatrix}}_{2N \times 1}
 $$
 
 ### 3-Horizon Matrix Assembly ($N = 3$)
 For a prediction horizon of $N = 3$, the matrices $S_x$ and $S_u$ are assembled as follows:
 
 $$
-S_x = {\begin{bmatrix} A \\ A^2 \\ A^3 \end{bmatrix}}_{12 \times 4}
+S_x = {\begin{bmatrix}
+A \\\\
+A^2 \\\\
+A^3
+\end{bmatrix}}_{12 \times 4}
 $$
 
 $$
-S_u = {\begin{bmatrix} B & 0 & 0 \\ AB & B & 0 \\ A^2 B & AB & B \end{bmatrix}}_{12 \times 6}
+S_u = {\begin{bmatrix}
+B & 0 & 0 \\\\
+AB & B & 0 \\\\
+A^2 B & AB & B
+\end{bmatrix}}_{12 \times 6}
 $$
 
 ### Optimization Problem (Quadratic Program)
@@ -109,11 +139,25 @@ $$
 Constraints are compiled into a single bound-constrained matrix expression $l \le M U \le u$:
 
 $$
-M = \begin{bmatrix} I_{2N \times 2N} \\ S_u \end{bmatrix}, \quad l = \begin{bmatrix} U_{\min} \\ -S_x x_0 + X_{\min} \end{bmatrix}, \quad u = \begin{bmatrix} U_{\max} \\ -S_x x_0 + X_{\max} \end{bmatrix}
+M = \begin{bmatrix}
+I_{2N \times 2N} \\\\
+S_u
+\end{bmatrix}, \quad
+l = \begin{bmatrix}
+U_{\min} \\\\
+-S_x x_0 + X_{\min}
+\end{bmatrix}, \quad
+u = \begin{bmatrix}
+U_{\max} \\\\
+-S_x x_0 + X_{\max}
+\end{bmatrix}
 $$
 
 For $N = 3$, the constraint matrix $M$ is:
 
 $$
-M = {\begin{bmatrix} I_{6 \times 6} \\ S_u \end{bmatrix}}_{18 \times 6}
+M = {\begin{bmatrix}
+I_{6 \times 6} \\\\
+S_u
+\end{bmatrix}}_{18 \times 6}
 $$
