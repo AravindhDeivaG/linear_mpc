@@ -159,5 +159,6 @@ Eigen::VectorXd OsqpSolver::getSolution() const {
     } else {
         sol.setZero();
     }
+    std::cout<<"sol"<<sol<<std::endl;
     return sol;
 }

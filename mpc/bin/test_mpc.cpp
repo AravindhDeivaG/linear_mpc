@@ -1,66 +1,38 @@
-#include "imgui_wrapper.h"
-#include <imgui.h> // Include imgui to access IsMouseDown directly
-#include <cmath>
+#include "mpc_controller.h"
+#include <iostream>
+#include <Eigen/Dense>
 
 int main() {
-    // Create an 800x600 window
-    ImGuiWrapper wrapper(800, 600, "MPC Tracking Demo");
+    std::cout << "Starting MPC Validation Test..." << std::endl;
 
-    // Circle positions (initialized in the center)
-    float targetX = 400.0f;
-    float targetY = 300.0f;
-    float currentX = 200.0f;
-    float currentY = 300.0f;
+    // 1. Initialize MPC Controller with horizon 1 and dt 0.1
+    int horizon = 5;
+    double dt = 0.1;
+    MpcController controller(horizon, dt);
 
-    const float targetRadius = 25.0f;
-    const float currentRadius = 15.0f;
+    // 2. Create and set initial state x (size 4)
+    Eigen::VectorXd x(4);
+    x << 0.0, 0.0, 0.0, 0.0;
+    controller.setCurrentState(x);
 
-    bool isDragging = false;
-    bool runMpc = false;
+    // 3. Create and set reference state x_ref (size 4)
+    Eigen::VectorXd x_ref(4);
+    x_ref << 10.0, 10.0, 0.0, 0.0;
+    controller.setReferenceState(x_ref);
 
-    while (!wrapper.shouldClose()) {
-        wrapper.beginFrame();
+    // 4. Run one loop of control logic to verify matrix products and solver
+    std::cout << "Running doControl()..." << std::endl;
+    controller.doControl();
 
-        // 1. Draw the Toggle Button at coordinates (10, 10)
-        wrapper.drawToggleButton(10.0f, 10.0f, "Run MPC Loop", runMpc);
+    Eigen::VectorXd u_opt;
+    controller.getOptimalControl(u_opt);
+    std::cout << "Optimal control u_opt: \n" << u_opt << std::endl;
 
-        // 2. Handle Mouse Dragging for the Target Circle (Direct State Check)
-        float mouseX, mouseY;
-        wrapper.getMousePos(mouseX, mouseY);
+    controller.doControl();
+    controller.getOptimalControl(u_opt);
+    std::cout << "Optimal control u_opt: \n" << u_opt << std::endl;
 
-        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            if (!isDragging) {
-                // Check if we clicked within the target circle boundary
-                float dx = mouseX - targetX;
-                float dy = mouseY - targetY;
-                float dist = std::sqrt(dx * dx + dy * dy);
-                if (dist <= targetRadius) {
-                    isDragging = true;
-                }
-            }
-        } else {
-            isDragging = false;
-        }
 
-        if (isDragging) {
-            targetX = mouseX;
-            targetY = mouseY;
-        }
-
-        // 3. Control law loop (left empty for you to implement MPC)
-        if (runMpc) {
-            // TODO: Populate with your MPC control law
-        }
-
-        // 4. Render circles
-        // Target: light larger circle (semi-transparent pinkish-red)
-        wrapper.drawSolidCircle(targetX, targetY, targetRadius, 255, 130, 130, 150);
-
-        // Current state: dark medium-sized circle (opaque navy blue)
-        wrapper.drawSolidCircle(currentX, currentY, currentRadius, 20, 50, 100, 255);
-
-        wrapper.endFrame();
-    }
-
+    std::cout << "MPC Validation Test completed successfully!" << std::endl;
     return 0;
 }

@@ -137,3 +137,8 @@ void ImGuiWrapper::getMousePos(float& x, float& y) {
     y = mousePos.y;
 }
 
+void ImGuiWrapper::setVSync(bool enabled) {
+    glfwSwapInterval(enabled ? 1 : 0);
+}
+
+

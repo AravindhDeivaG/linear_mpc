@@ -27,6 +27,9 @@ public:
     // Function to set reference state
     void setReferenceState(Eigen::VectorXd x_ref);
 
+    // Get optimal control action
+    void getOptimalControl(Eigen::VectorXd& u);
+
 private:
     // Time step
     double dt_;
@@ -49,6 +52,8 @@ private:
     // Reference state
     Eigen::VectorXd x_ref_;
 
+    // Current optimal control command
+    Eigen::VectorXd u_opt_;
 
     /*
      MPC optimization matrices
@@ -74,6 +79,12 @@ private:
      Cost function related variables
     */
     Eigen::MatrixXd Q_, R_;
+
+    // Projector matrix to create copy of a variable multiple times
+    Eigen::MatrixXd state_projector_;
+    Eigen::MatrixXd input_projector_;
+
+    
 };
 
 #endif // MPC_CONTROLLER_H

@@ -22,6 +22,9 @@ MpcController::MpcController(int n, double dt) : solver_(2*n, 6*n) {
     B_(2,0) = dt_;
     B_(3,1) = dt_;
 
+    std::cout<<"A : \n"<<A_<<std::endl;
+    std::cout<<"B : \n"<<B_<<std::endl;
+
     // Initialize state
     x_.resize(4);
     u_.resize(2);
@@ -53,8 +56,8 @@ MpcController::MpcController(int n, double dt) : solver_(2*n, 6*n) {
     for(int i=0;i<n_;i++)
     {
         Q_.block(4*i,4*i,2,2) = Eigen::MatrixXd::Identity(2,2)*10;
-        Q_.block(4*i+2,4*i+2,2,2) = Eigen::MatrixXd::Identity(2,2)*2;
-        R_.block(2*i,2*i,2,2) = Eigen::MatrixXd::Identity(2,2)*1.0;
+        Q_.block(4*i+2,4*i+2,2,2) = Eigen::MatrixXd::Identity(2,2)*0.0000001;
+        R_.block(2*i,2*i,2,2) = Eigen::MatrixXd::Identity(2,2)*0.00000001;
     }
 
     // Hessian matrix H = 2*(Su'*Q*Su + R)
@@ -77,20 +80,33 @@ MpcController::MpcController(int n, double dt) : solver_(2*n, 6*n) {
     x_min_.resize(4);
     x_max_.resize(4);
 
-    x_min_ << -10000,-10000,-10,-10;
-    x_max_ << 10000,10000,10,10;
+    x_min_ << -10000,-10000,-1000,-1000;
+    x_max_ << 10000,10000,1000,1000;
     
     // Input limits for acceleration
     u_min_.resize(2);
     u_max_.resize(2);
 
-    u_min_ << -5,-5;
-    u_max_ << 5,5;
+    u_min_ << -5000,-5000;
+    u_max_ << 5000,5000;
     
     for(int i = 0;i<n_;i++)
     {
         l_.block(2*i,0,2,1) = u_min_;    
         u_.block(2*i,0,2,1) = u_max_;        
+    }
+
+    //  Initialize projector matrix for input and state
+    state_projector_.resize(4*n_,4);
+    input_projector_.resize(2*n_,2);
+
+    state_projector_.setZero();
+    input_projector_.setZero();
+
+    for(int i=0;i<n_;i++)
+    {
+        state_projector_.block(4*i,0,4,4) = Eigen::MatrixXd::Identity(4,4);
+        input_projector_.block(2*i,0,2,2) = Eigen::MatrixXd::Identity(2,2);
     }
 
     std::cout << "MpcController initialized." << std::endl;
@@ -111,9 +127,38 @@ void MpcController::setReferenceState(Eigen::VectorXd x_ref) {
     x_ref_ = x_ref;
 }
 
+// Function to get optimal control action
+void MpcController::getOptimalControl(Eigen::VectorXd& u) {
+    u = u_opt_;
+}
+
 // Function to perform control action
 void MpcController::doControl() {
     
-    // Gradient : 
-
+    /*
+    Gradient g = 2 * Su' * Q * (Sx * x - x_ref)
+    x_ref is multiplied by projector to create copies of itself
+    */
+    g_ = 2 * Su_.transpose() * Q_ * (Sx_ * x_ - state_projector_*x_ref_);
+    
+    // Lower and upper bound update for state constraints (size 4*n_)
+    l_.block(2*n_, 0, 4*n_, 1) = -Sx_*x_ + state_projector_*x_min_;
+    
+    u_.block(2*n_, 0, 4*n_, 1) = -Sx_*x_ + state_projector_*x_max_;
+    
+    // Set H and g for solver
+    solver_.setHessian(H_);
+    solver_.setGradient(g_);
+    solver_.setConstraintMatrix(M_);
+    solver_.setLowerBound(l_);
+    solver_.setUpperBound(u_);
+    
+    // solve 
+    solver_.solve();
+    
+    // get solution
+    u_opt_ = solver_.getSolution();
+    
+    
+    // std::cout << "Control applied: " << u_[0] << " " << u_[1] << std::endl;
 }

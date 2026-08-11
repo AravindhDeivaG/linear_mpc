@@ -43,6 +43,9 @@ public:
     // Retrieves the current mouse position coordinates
     void getMousePos(float& x, float& y);
 
+    // Enables/disables vertical sync (VSync)
+    void setVSync(bool enabled);
+
 private:
     GLFWwindow* m_window;
     int m_width;

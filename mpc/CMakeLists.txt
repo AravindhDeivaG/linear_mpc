@@ -17,11 +17,16 @@ target_link_libraries(mpc PUBLIC
     osqp_impl
 )
 
-# Create the test executable
+# Create the test/validation executable
 add_executable(mpc_demo bin/test_mpc.cpp)
-
-# Link against the wrapper libraries
 target_link_libraries(mpc_demo PRIVATE
+    mpc
+    imgui_wrapper
+)
+
+# Create the interactive visualization executable
+add_executable(mpc_viz bin/mpc_viz.cpp)
+target_link_libraries(mpc_viz PRIVATE
     mpc
     imgui_wrapper
 )
