@@ -14,9 +14,9 @@ if(NOT OSQP_LIBRARY)
 endif()
 
 # ---------------------------------------------------------------------------
-# OSQP Wrapper Library Target
+# OSQP Wrapper Library Target (Shared Object)
 # ---------------------------------------------------------------------------
-add_library(osqp_impl STATIC
+add_library(osqp_impl SHARED
     src/osqp_solver.cpp
 )
 

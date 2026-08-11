@@ -37,6 +37,12 @@ public:
     // Draw a hollow circle at (cx, cy) with radius r and RGB(A) color (0-255)
     void drawHollowCircle(float cx, float cy, float r, int red, int green, int blue, int alpha = 255);
 
+    // Draw a toggle button/checkbox at (x, y) with text label. Returns current toggled state.
+    bool drawToggleButton(float x, float y, const std::string& label, bool& state);
+
+    // Retrieves the current mouse position coordinates
+    void getMousePos(float& x, float& y);
+
 private:
     GLFWwindow* m_window;
     int m_width;

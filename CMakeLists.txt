@@ -5,6 +5,9 @@ project(LinearMPC_DearImGui C CXX)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Enable Position Independent Code (required for compiling shared libraries)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # ---------------------------------------------------------------------------
 # Subdirectories
 # ---------------------------------------------------------------------------
@@ -13,3 +16,6 @@ add_subdirectory(imgui_wrapper)
 
 # Include the generic OSQP solver wrapper subdirectory
 add_subdirectory(osqp_impl)
+
+# Include the MPC visualization subdirectory
+add_subdirectory(mpc)

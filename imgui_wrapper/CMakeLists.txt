@@ -10,7 +10,7 @@ find_package(glfw3 REQUIRED)
 # ---------------------------------------------------------------------------
 # Dear ImGui Core Library Target
 # ---------------------------------------------------------------------------
-add_library(imgui STATIC
+add_library(imgui SHARED
     src/imgui/imgui.cpp
     src/imgui/imgui_demo.cpp
     src/imgui/imgui_draw.cpp
@@ -26,7 +26,7 @@ target_include_directories(imgui PUBLIC
 # ---------------------------------------------------------------------------
 # Dear ImGui GLFW + OpenGL3 Backend Library Target
 # ---------------------------------------------------------------------------
-add_library(imgui_backend STATIC
+add_library(imgui_backend SHARED
     src/imgui/backends/imgui_impl_glfw.cpp
     src/imgui/backends/imgui_impl_opengl3.cpp
 )
@@ -46,7 +46,7 @@ target_link_libraries(imgui_backend PUBLIC
 # ---------------------------------------------------------------------------
 # ImGui Wrapper Library Target
 # ---------------------------------------------------------------------------
-add_library(imgui_wrapper STATIC
+add_library(imgui_wrapper SHARED
     src/imgui_wrapper.cpp
 )
 

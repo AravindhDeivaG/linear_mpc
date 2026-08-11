@@ -115,3 +115,25 @@ void ImGuiWrapper::drawHollowCircle(float cx, float cy, float r, int red, int gr
     // Draw on the background draw list
     ImGui::GetBackgroundDrawList()->AddCircle(ImVec2(cx, cy), r, color, 64, 2.0f); // 2.0f thickness
 }
+
+bool ImGuiWrapper::drawToggleButton(float x, float y, const std::string& label, bool& state) {
+    ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
+    ImGui::Begin("Toggle Control Panel", nullptr, 
+                 ImGuiWindowFlags_NoTitleBar | 
+                 ImGuiWindowFlags_NoResize | 
+                 ImGuiWindowFlags_NoMove | 
+                 ImGuiWindowFlags_NoScrollbar | 
+                 ImGuiWindowFlags_NoSavedSettings | 
+                 ImGuiWindowFlags_AlwaysAutoResize | 
+                 ImGuiWindowFlags_NoBackground);
+    ImGui::Checkbox(label.c_str(), &state);
+    ImGui::End();
+    return state;
+}
+
+void ImGuiWrapper::getMousePos(float& x, float& y) {
+    ImVec2 mousePos = ImGui::GetMousePos();
+    x = mousePos.x;
+    y = mousePos.y;
+}
+

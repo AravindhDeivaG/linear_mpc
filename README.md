@@ -1,6 +1,6 @@
 # Linear MPC - Dear ImGui Setup with Wrapper
 
-This directory contains a C++ library structure incorporating a custom Dear ImGui wrapper (`imgui_wrapper`) and a generic OSQP solver wrapper (`osqp_impl`).
+This directory contains a C++ library structure incorporating a custom Dear ImGui wrapper (`imgui_wrapper`), a generic OSQP solver wrapper (`osqp_impl`), and an interactive MPC visualization application (`mpc`).
 
 ## Project Structure
 
@@ -11,9 +11,9 @@ linear_mpc/
   imgui_wrapper/            # Custom wrapper component
     CMakeLists.txt          # Wrapper sub-build file
     include/
-      imgui_wrapper.h       # Wrapper public class interface
+      imgui_wrapper.h       # Wrapper public class interface (rendering & inputs)
     src/
-      imgui_wrapper.cpp     # Wrapper implementation (lifecycle, events, circles)
+      imgui_wrapper.cpp     # Wrapper implementation (toggle buttons, mouse position)
       main.cpp              # Test script verifying mouse events & drawing
       imgui/                # Original copy-pasted Dear ImGui distribution
     bin/
@@ -24,6 +24,13 @@ linear_mpc/
       osqp_solver.h         # Solver wrapper public header
     src/
       osqp_solver.cpp       # Solver wrapper implementation
+    bin/
+      solver_demo           # Test executable solving a 2D QP
+  mpc/                      # MPC visualization & simulation
+    CMakeLists.txt          # MPC sub-build file
+    bin/
+      test_mpc.cpp          # Interactive tracking demo (draggable target, following state)
+      mpc_demo              # Compiled interactive demo executable
 ```
 
 ## Prerequisites
@@ -50,27 +57,13 @@ sudo apt-get install build-essential cmake libglfw3-dev libgl1-mesa-dev libx11-d
    cmake --build .
    ```
 
-## OSQP Solver Wrapper Usage
+## Running the MPC Interactive Demo
 
-The `osqp_impl` library builds a static library `libosqp_impl.a` linking against Eigen and the OSQP solver. In your application, you can use the `OsqpSolver` class:
-
-```cpp
-#include <osqp_solver.h>
-#include <Eigen/Dense>
-
-// Initialize solver with n variables and m constraints
-OsqpSolver solver(n, m);
-
-// Set problem matrices and vectors
-solver.setHessian(P);
-solver.setGradient(q);
-solver.setConstraintMatrix(A);
-solver.setLowerBound(l);
-solver.setUpperBound(u);
-
-// Solve the QP
-if (solver.solve()) {
-    Eigen::VectorXd solution = solver.getSolution();
-    // Do something with solution...
-}
+To test the interactive circle tracking simulation:
+```bash
+./mpc/bin/mpc_demo
 ```
+* **Dragging**: Left-click and hold near the light red target circle to drag it around.
+* **Toggle**: Toggle the "Run MPC Loop" checkbox at the top-left:
+  * When **disabled**: Moving the target has no effect on the current state.
+  * When **enabled**: The navy blue circle follows the target circle.
