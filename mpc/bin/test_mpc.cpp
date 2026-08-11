@@ -6,7 +6,7 @@ int main() {
     std::cout << "Starting MPC Validation Test..." << std::endl;
 
     // 1. Initialize MPC Controller with horizon 1 and dt 0.1
-    int horizon = 5;
+    int horizon = 10;
     double dt = 0.1;
     MpcController controller(horizon, dt);
 

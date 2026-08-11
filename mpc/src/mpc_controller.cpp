@@ -56,8 +56,8 @@ MpcController::MpcController(int n, double dt) : solver_(2*n, 6*n) {
     for(int i=0;i<n_;i++)
     {
         Q_.block(4*i,4*i,2,2) = Eigen::MatrixXd::Identity(2,2)*10;
-        Q_.block(4*i+2,4*i+2,2,2) = Eigen::MatrixXd::Identity(2,2)*0.0000001;
-        R_.block(2*i,2*i,2,2) = Eigen::MatrixXd::Identity(2,2)*0.00000001;
+        Q_.block(4*i+2,4*i+2,2,2) = Eigen::MatrixXd::Identity(2,2)*0.1;
+        R_.block(2*i,2*i,2,2) = Eigen::MatrixXd::Identity(2,2)*0.000;
     }
 
     // Hessian matrix H = 2*(Su'*Q*Su + R)
@@ -80,15 +80,15 @@ MpcController::MpcController(int n, double dt) : solver_(2*n, 6*n) {
     x_min_.resize(4);
     x_max_.resize(4);
 
-    x_min_ << -10000,-10000,-1000,-1000;
-    x_max_ << 10000,10000,1000,1000;
+    x_min_ << -10000,-10000,-200,-200;
+    x_max_ << 10000,10000,200,200;
     
     // Input limits for acceleration
     u_min_.resize(2);
     u_max_.resize(2);
 
-    u_min_ << -5000,-5000;
-    u_max_ << 5000,5000;
+    u_min_ << -500,-500;
+    u_max_ << 500,500;
     
     for(int i = 0;i<n_;i++)
     {
@@ -162,3 +162,12 @@ void MpcController::doControl() {
     
     // std::cout << "Control applied: " << u_[0] << " " << u_[1] << std::endl;
 }
+
+void MpcController::getPredictedStates(Eigen::VectorXd& X) {
+    X = Sx_ * x_ + Su_ * u_opt_;
+}
+
+int MpcController::getHorizon() const {
+    return n_;
+}
+

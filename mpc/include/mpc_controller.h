@@ -30,6 +30,12 @@ public:
     // Get optimal control action
     void getOptimalControl(Eigen::VectorXd& u);
 
+    // Get predicted states over the horizon
+    void getPredictedStates(Eigen::VectorXd& X);
+
+    // Get the horizon length
+    int getHorizon() const;
+
 private:
     // Time step
     double dt_;

@@ -31,8 +31,11 @@ int main() {
     Eigen::VectorXd u(2);
     u << 0, 0;
 
+    // Predicted states trajectory
+    Eigen::VectorXd X_pred;
+
     // Create MPC controller
-    MpcController mpc(10, dt);
+    MpcController mpc(30, dt);
     mpc.setCurrentState(x);
     mpc.setReferenceState(x_ref);
 
@@ -88,6 +91,9 @@ int main() {
             x(1) = x(1) + x(3)*dt + u(1)*dt*dt/2;
             x(2) = x(2) + u(0)*dt;
             x(3) = x(3) + u(1)*dt;
+
+            // Get predicted states
+            mpc.getPredictedStates(X_pred);
         }
 
         // 4. Render circles
@@ -98,6 +104,16 @@ int main() {
 
         // Current state: dark medium-sized circle (opaque navy blue)
         wrapper.drawSolidCircle(currentX, currentY, currentRadius, 20, 50, 100, 255);
+
+        // Draw predicted trajectory as bright cyan small hollow circles
+        if (runMpc && X_pred.size() > 0) {
+            int horizon = mpc.getHorizon();
+            for (int i = 0; i < horizon; ++i) {
+                float px = X_pred(4 * i);
+                float py = X_pred(4 * i + 1);
+                wrapper.drawHollowCircle(px, py, 4.0f, 0, 255, 255, 255);
+            }
+        }
 
         wrapper.endFrame();
 
