@@ -1,24 +1,29 @@
 # Linear MPC - Dear ImGui Setup with Wrapper
 
-This directory contains a main C++ project structure and a custom wrapper library (`imgui_wrapper`) to simplify windowing, input events, and drawing shapes.
+This directory contains a C++ library structure incorporating a custom Dear ImGui wrapper (`imgui_wrapper`) and a generic OSQP solver wrapper (`osqp_impl`).
 
 ## Project Structure
 
 ```
 linear_mpc/
-  CMakeLists.txt            # Root build file (only includes the subdirectory)
+  CMakeLists.txt            # Root build file
   README.md                 # Project guide
   imgui_wrapper/            # Custom wrapper component
-    CMakeLists.txt          # Wrapper sub-build file (contains all ImGui compilation targets)
+    CMakeLists.txt          # Wrapper sub-build file
     include/
       imgui_wrapper.h       # Wrapper public class interface
     src/
       imgui_wrapper.cpp     # Wrapper implementation (lifecycle, events, circles)
       main.cpp              # Test script verifying mouse events & drawing
       imgui/                # Original copy-pasted Dear ImGui distribution
-        backends/           # Renderer and platform bindings (GLFW, OpenGL, etc.)
     bin/
-      wrapper_demo          # Compiled test executable (automatically generated)
+      wrapper_demo          # Compiled test executable
+  osqp_impl/                # Generic OSQP solver wrapper component
+    CMakeLists.txt          # Solver sub-build file
+    include/
+      osqp_solver.h         # Solver wrapper public header
+    src/
+      osqp_solver.cpp       # Solver wrapper implementation
 ```
 
 ## Prerequisites
@@ -45,13 +50,27 @@ sudo apt-get install build-essential cmake libglfw3-dev libgl1-mesa-dev libx11-d
    cmake --build .
    ```
 
-## How to Run
+## OSQP Solver Wrapper Usage
 
-After compilation, the demonstration application is output directly into `imgui_wrapper/bin/`:
-```bash
-./imgui_wrapper/bin/wrapper_demo
+The `osqp_impl` library builds a static library `libosqp_impl.a` linking against Eigen and the OSQP solver. In your application, you can use the `OsqpSolver` class:
+
+```cpp
+#include <osqp_solver.h>
+#include <Eigen/Dense>
+
+// Initialize solver with n variables and m constraints
+OsqpSolver solver(n, m);
+
+// Set problem matrices and vectors
+solver.setHessian(P);
+solver.setGradient(q);
+solver.setConstraintMatrix(A);
+solver.setLowerBound(l);
+solver.setUpperBound(u);
+
+// Solve the QP
+if (solver.solve()) {
+    Eigen::VectorXd solution = solver.getSolution();
+    // Do something with solution...
+}
 ```
-
-### Demonstration Script Behavior
-- When you **click and hold** the left mouse button, a blue solid circle (radius 15) and a red hollow circle (radius 30) are drawn on the screen centered at the mouse coordinates.
-- When you **release** the left mouse button, the circles disappear.

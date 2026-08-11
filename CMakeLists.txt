@@ -10,3 +10,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ---------------------------------------------------------------------------
 # Include the wrapper subdirectory which encapsulates all ImGui build rules
 add_subdirectory(imgui_wrapper)
+
+# Include the generic OSQP solver wrapper subdirectory
+add_subdirectory(osqp_impl)
