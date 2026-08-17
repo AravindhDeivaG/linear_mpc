@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(LinearMPC_DearImGui C CXX)
 
-# Set C++ standard to C++11 (minimum required by Dear ImGui)
-set(CMAKE_CXX_STANDARD 11)
+# Set C++ standard to C++17
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Enable Position Independent Code (required for compiling shared libraries)

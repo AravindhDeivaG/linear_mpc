@@ -1,15 +1,27 @@
-# Linear MPC Visualizer
+# Linear MPC Visualizer & Strategy Framework
 
-This project is an interactive 2D tracking simulator that visualizes a double-integrator point mass tracking a draggable target in real-time. The system state (navy blue circle) is controlled by a linear Model Predictive Control (MPC) law solved via the OSQP solver at a constant 20 ms interval. The predicted trajectory planned by the MPC solver is rendered on-screen as a sequence of small, bright cyan hollow circles connecting the current position to the target (light red circle).
+This project is an interactive 2D tracking simulator that visualizes a double-integrator point mass tracking a draggable target in real-time. The controller is powered by a modular, strategy-pattern **Model Predictive Control (MPC)** engine solved via the **OSQP** quadratic programming solver.
+
+The predicted trajectory planned by the MPC solver is rendered on-screen as a sequence of bright cyan hollow circles connecting the current state (navy blue circle) to the target reference (semi-transparent red circle).
 
 ![MPC Tracking Demo](imgs/mpc_demo.gif)
 
+---
+
+## Key Features & Architecture
+
+* **Swappable Formulation Strategies**: Utilizes a Strategy pattern allowing dynamic switching between **Dense (Condensed)** and **Sparse (Full-Space)** MPC backends (`MpcController`).
+* **Zero Runtime Dynamic Allocation**: Problem dimensions ($N, n_s, n_i$) are declared at instantiation to pre-allocate all matrices upfront.
+* **Problem-Agnostic Engine**: System dynamics matrices ($A, B$), state bounds ($x_{\min}, x_{\max}$), input bounds ($u_{\min}, u_{\max}$), and cost weights ($Q, R$) are configured externally by the user application.
+
+---
+
 ## Installation
 
-### Dependencies
+### 1. System Dependencies
 Ensure the following development libraries are installed on your system:
-- **GLFW3** & **OpenGL** (for rendering)
-- **Eigen3** (for matrix algebra)
+* **GLFW3** & **OpenGL** (for real-time rendering)
+* **Eigen3** (for matrix algebra)
 
 On Ubuntu/Debian, install them via:
 ```bash
@@ -17,147 +29,75 @@ sudo apt update
 sudo apt install build-essential cmake libglfw3-dev libgl1-mesa-dev libx11-dev
 ```
 
-### Submodule
-- **Dear ImGui**: Bundled locally within the `imgui_wrapper/src/imgui` directory. No external installation is needed.
+### 2. Submodule
+* **Dear ImGui**: Bundled locally within `imgui_wrapper/src/imgui`. No external installation is needed.
 
-### OSQP Installation
-The MPC controller requires **OSQP version 1.0.0** to be compiled and installed globally.
-1. Clone and build OSQP v1.0.0 from source:
-   ```bash
-   git clone --recursive https://github.com/osqp/osqp.git
-   cd osqp
-   git checkout v1.0.0
-   mkdir build && cd build
-   cmake ..
-   make -j$(nproc)
-   ```
-2. Install it on your system:
-   ```bash
-   sudo make install
-   ```
+### 3. OSQP Solver (v1.0.0)
+The MPC controller requires **OSQP version 1.0.0** installed on your system.
 
-### Building the Project
-To compile the library and the executable targets:
+```bash
+git clone --recursive https://github.com/osqp/osqp.git
+cd osqp
+git checkout v1.0.0
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+sudo make install
+```
+
+### 4. Building the Project
+To compile the library and executable targets:
 ```bash
 cmake -B build -S .
 cmake --build build
 ```
-The executables will be built in:
-* `./build/mpc/mpc_viz` (Interactive GUI visualizer)
-* `./build/mpc/mpc_demo` (Non-graphical math validation script)
+
+Executables will be generated at:
+* `./build/mpc/mpc_viz` (Interactive 2D ImGui visualizer)
+* `./build/mpc/mpc_demo` (Math validation & strategy comparison test)
 
 ---
 
-## MPC Formulation
+## Formulations & Mathematical Documentation
 
-### System State Space
-The point mass is modeled as a 2D double-integrator. The state vector is $x_k = [p_x, p_y, v_x, v_y]^T$ (positions and velocities) and the control inputs are $u_k = [a_x, a_y]^T$ (accelerations). The discrete-time state-space dynamics with time step $dt$ are:
+The framework supports two distinct MPC formulation strategies:
 
-$$
-x_{k+1} = A x_k + B u_k
-$$
+### 1. Dense (Condensed) Formulation
+Eliminates intermediate state predictions by expressing future states as $X = S_x x_0 + S_u U$. Solves a smaller QP problem in $U \in \mathbb{R}^{N n_i}$ with dense Hessian $H = 2(S_u^T \mathbf{Q} S_u + \mathbf{R})$.
 
-$$
-A = \begin{bmatrix}
-1 & 0 & dt & 0 \\\\
-0 & 1 & 0 & dt \\\\
-0 & 0 & 1 & 0 \\\\
-0 & 0 & 0 & 1
-\end{bmatrix}, \quad
-B = \begin{bmatrix}
-0.5 dt^2 & 0 \\\\
-0 & 0.5 dt^2 \\\\
-dt & 0 \\\\
-0 & dt
-\end{bmatrix}
-$$
+📖 **[Read Full Dense Formulation Guide](docs/dense_formulation.md)**
 
-### Condensed Model Formulation
-Over a prediction horizon $N$, we express the stack of predicted states $X$ as a function of the initial state $x_0$ and the stacked control sequence $U$:
+### 2. Sparse (Full-Space) Formulation
+Interleaves inputs and states inside the decision vector $z = [u_0^T, x_1^T, u_1^T, x_2^T, \dots]^T \in \mathbb{R}^{N(n_s + n_i)}$. Retains diagonal Hessian $H = 2(S_x^T \mathbf{Q} S_x + S_u^T \mathbf{R} S_u)$ and enforces system dynamics $x_{k+1} = A x_k + B u_k$ as block-tridiagonal linear equality constraints.
 
-$$
-X = S_x x_0 + S_u U
-$$
+📖 **[Read Full Sparse Formulation Guide](docs/sparse_formulation.md)**
 
-where:
+---
 
-$$
-X = {\begin{bmatrix}
-x_1 \\\\
-x_2 \\\\
-\vdots \\\\
-x_N
-\end{bmatrix}}_{4N \times 1}, \quad
-U = {\begin{bmatrix}
-u_0 \\\\
-u_1 \\\\
-\vdots \\\\
-u_{N-1}
-\end{bmatrix}}_{2N \times 1}
-$$
+## Usage Example
 
-### 3-Horizon Matrix Assembly ($N = 3$)
-For a prediction horizon of $N = 3$, the matrices $S_x$ and $S_u$ are assembled as follows:
+```cpp
+#include "mpc_controller.h"
 
-$$
-S_x = {\begin{bmatrix}
-A \\\\
-A^2 \\\\
-A^3
-\end{bmatrix}}_{12 \times 4}
-$$
+// 1. Instantiate controller with horizon N=20, 4 states, 2 inputs
+MpcController mpc(20, 4, 2, FormulationType::SPARSE);
 
-$$
-S_u = {\begin{bmatrix}
-B & 0 & 0 \\\\
-AB & B & 0 \\\\
-A^2 B & AB & B
-\end{bmatrix}}_{12 \times 6}
-$$
+// 2. Set system dynamics (A, B) and constraints
+mpc.setSystemMatrices(A, B);
+mpc.setStateLimits(x_min, x_max);
+mpc.setInputLimits(u_min, u_max);
+mpc.setCostMatrices(Q, R);
 
-### Optimization Problem (Quadratic Program)
-The MPC objective function penalizes tracking error and control effort:
+// 3. Populate pre-allocated matrices & setup solver workspace
+mpc.setup();
 
-$$
-J = (X - X_{ref})^T \mathbf{Q} (X - X_{ref}) + U^T \mathbf{R} U
-$$
+// 4. Control loop execution
+mpc.setCurrentState(x_current);
+mpc.setReferenceState(x_target);
+mpc.doControl();
 
-where $\mathbf{Q} = \text{diag}(Q, \dots, Q)$ and $\mathbf{R} = \text{diag}(R, \dots, R)$ are block-diagonal weight matrices. Substituting the condensed dynamics $X = S_x x_0 + S_u U$ yields:
-
-$$
-J = \frac{1}{2} U^T H U + g^T U + \text{const}
-$$
-
-$$
-H = 2(S_u^T \mathbf{Q} S_u + \mathbf{R})
-$$
-
-$$
-g = 2 S_u^T \mathbf{Q} (S_x x_0 - X_{ref})
-$$
-
-Constraints are compiled into a single bound-constrained matrix expression $l \le M U \le u$:
-
-$$
-M = \begin{bmatrix}
-I_{2N \times 2N} \\\\
-S_u
-\end{bmatrix}, \quad
-l = \begin{bmatrix}
-U_{\min} \\\\
--S_x x_0 + X_{\min}
-\end{bmatrix}, \quad
-u = \begin{bmatrix}
-U_{\max} \\\\
--S_x x_0 + X_{\max}
-\end{bmatrix}
-$$
-
-For $N = 3$, the constraint matrix $M$ is:
-
-$$
-M = {\begin{bmatrix}
-I_{6 \times 6} \\\\
-S_u
-\end{bmatrix}}_{18 \times 6}
-$$
+// 5. Retrieve optimal control action u0 and predicted trajectory X
+Eigen::VectorXd u0, X_pred;
+mpc.getOptimalControl(u0);
+mpc.getPredictedStates(X_pred);
+```

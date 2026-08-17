@@ -5,6 +5,8 @@
 # Create the shared library target for MPC logic
 add_library(mpc SHARED
     src/mpc_controller.cpp
+    src/dense_formulation.cpp
+    src/sparse_formulation.cpp
 )
 
 # Expose include/ publicly

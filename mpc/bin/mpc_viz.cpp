@@ -16,26 +16,64 @@ int main() {
     float currentX = 200.0f;
     float currentY = 300.0f;
 
-    // Time step
+    // Dimensions & Time step
+    const int horizon = 20;
+    const int nx = 4;
+    const int nu = 2;
     const double dt = 0.02;
 
     // State and Reference
-    Eigen::VectorXd x(4);
+    Eigen::VectorXd x(nx);
     x << currentX, currentY, 0, 0;
 
     // Reference state
-    Eigen::VectorXd x_ref(4);
+    Eigen::VectorXd x_ref(nx);
     x_ref << targetX, targetY, 0, 0;
 
     // Control inputs
-    Eigen::VectorXd u(2);
+    Eigen::VectorXd u(nu);
     u << 0, 0;
 
     // Predicted states trajectory
     Eigen::VectorXd X_pred;
 
-    // Create MPC controller
-    MpcController mpc(30, dt);
+    // Define 2D double-integrator system dynamics and constraints
+    Eigen::MatrixXd A(nx, nx);
+    A.setIdentity();
+    A(0,2) = dt;
+    A(1,3) = dt;
+
+    Eigen::MatrixXd B(nx, nu);
+    B.setZero();
+    B(0,0) = 0.5*dt*dt;
+    B(1,1) = 0.5*dt*dt;
+    B(2,0) = dt;
+    B(3,1) = dt;
+
+    Eigen::VectorXd x_min(nx), x_max(nx);
+    x_min << -10000, -10000, -200, -200;
+    x_max <<  10000,  10000,  200,  200;
+
+    Eigen::VectorXd u_min(nu), u_max(nu);
+    u_min << -500, -500;
+    u_max <<  500,  500;
+
+    Eigen::MatrixXd Q(nx, nx);
+    Q.setZero();
+    Q.block(0,0,2,2) = Eigen::MatrixXd::Identity(2,2)*10.0;
+    Q.block(2,2,2,2) = Eigen::MatrixXd::Identity(2,2)*0.1;
+
+    Eigen::MatrixXd R(nu, nu);
+    R.setZero();
+
+    // Create and setup MPC controller with pre-allocated dimensions
+    MpcController mpc(horizon, nx, nu, FormulationType::SPARSE);
+    mpc.setSystemMatrices(A, B);
+    mpc.setStateLimits(x_min, x_max);
+    mpc.setInputLimits(u_min, u_max);
+    mpc.setCostMatrices(Q, R);
+    mpc.setup();
+
     mpc.setCurrentState(x);
     mpc.setReferenceState(x_ref);
 
@@ -80,9 +118,8 @@ int main() {
             x_ref(1) = targetY;
         }
 
-        // 3. Control law loop (left empty for you to implement MPC)
+        // 3. Control law loop
         if (runMpc) {
-            // TODO: Populate with your MPC control law
             mpc.setCurrentState(x);
             mpc.setReferenceState(x_ref);
             mpc.doControl();
@@ -122,11 +159,6 @@ int main() {
         if (duration.count() < 20000) {
             std::this_thread::sleep_for(std::chrono::microseconds(20000 - duration.count()));
         }
-
-        // auto end_frame = std::chrono::high_resolution_clock::now();
-        // auto total_duration = std::chrono::duration_cast<std::chrono::microseconds>(end_frame - start);
-        // std::cout << "Time taken by function: " << total_duration.count() << " microseconds" << std::endl;
-
     }
 
     return 0;

@@ -1,0 +1,243 @@
+#include "sparse_formulation.h"
+#include <iostream>
+#include <cassert>
+
+// Constructor: Pre-allocates memory for all Sparse MPC matrices given n, nx, nu
+SparseFormulation::SparseFormulation(int n, int nx, int nu, double dt)
+    : n_(n), nx_(nx), nu_(nu), dt_(dt), is_setup_(false) {
+    
+    // Allocate state, reference, and control vectors
+    x_.resize(nx_);
+    x_.setZero();
+    x_ref_.resize(nx_);
+    x_ref_.setZero();
+    u_opt_.resize(nu_);
+    u_opt_.setZero();
+
+    // Allocate system dynamics matrices A and B
+    A_.resize(nx_, nx_);
+    A_.setZero();
+    B_.resize(nx_, nu_);
+    B_.setZero();
+
+    // Allocate limits
+    x_min_.resize(nx_);
+    x_min_.setConstant(-1e4);
+    x_max_.resize(nx_);
+    x_max_.setConstant(1e4);
+
+    u_min_.resize(nu_);
+    u_min_.setConstant(-500.0);
+    u_max_.resize(nu_);
+    u_max_.setConstant(500.0);
+
+    // Allocate single-step cost matrices
+    Q_.resize(nx_, nx_);
+    Q_ = Eigen::MatrixXd::Identity(nx_, nx_) * 10.0;
+    R_.resize(nu_, nu_);
+    R_ = Eigen::MatrixXd::Identity(nu_, nu_) * 0.1;
+
+    int n_step = nu_ + nx_;
+    int n_var = n_ * n_step;
+    int n_dyn = n_ * nx_;
+    int n_constr = n_var + n_dyn;
+
+    // Pre-allocate selection matrices
+    Sx_.resize(n_ * nx_, n_var);
+    Sx_.setZero();
+    Su_.resize(n_ * nu_, n_var);
+    Su_.setZero();
+
+    // Pre-allocate full cost matrices
+    Q_full_.resize(n_ * nx_, n_ * nx_);
+    Q_full_.setZero();
+    R_full_.resize(n_ * nu_, n_ * nu_);
+    R_full_.setZero();
+
+    // Pre-allocate Hessian and gradient
+    H_.resize(n_var, n_var);
+    H_.setZero();
+    g_.resize(n_var);
+    g_.setZero();
+
+    // Pre-allocate constraint matrix and bounds
+    M_.resize(n_constr, n_var);
+    M_.setZero();
+
+    l_.resize(n_constr);
+    l_.setZero();
+    u_.resize(n_constr);
+    u_.setZero();
+
+    // Initialize OSQP Solver workspace
+    solver_.reset(new OsqpSolver(n_var, n_constr));
+}
+
+SparseFormulation::~SparseFormulation() = default;
+
+// Sets system matrices A (nx x nx) and B (nx x nu) with dimension assertions
+void SparseFormulation::setSystemMatrices(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B) {
+    assert(A.rows() == nx_ && A.cols() == nx_ && "Matrix A dimensions must match constructor nx");
+    assert(B.rows() == nx_ && B.cols() == nu_ && "Matrix B dimensions must match constructor (nx, nu)");
+    A_ = A;
+    B_ = B;
+}
+
+// Sets state limits with dimension assertions
+void SparseFormulation::setStateLimits(const Eigen::VectorXd& x_min, const Eigen::VectorXd& x_max) {
+    assert(x_min.size() == nx_ && "x_min size must match constructor nx");
+    assert(x_max.size() == nx_ && "x_max size must match constructor nx");
+    x_min_ = x_min;
+    x_max_ = x_max;
+}
+
+// Sets input limits with dimension assertions
+void SparseFormulation::setInputLimits(const Eigen::VectorXd& u_min, const Eigen::VectorXd& u_max) {
+    assert(u_min.size() == nu_ && "u_min size must match constructor nu");
+    assert(u_max.size() == nu_ && "u_max size must match constructor nu");
+    u_min_ = u_min;
+    u_max_ = u_max;
+}
+
+// Sets cost matrices Q and R with dimension assertions
+void SparseFormulation::setCostMatrices(const Eigen::MatrixXd& Q, const Eigen::MatrixXd& R) {
+    assert(Q.rows() == nx_ && Q.cols() == nx_ && "Matrix Q dimensions must match constructor nx");
+    assert(R.rows() == nu_ && R.cols() == nu_ && "Matrix R dimensions must match constructor nu");
+    Q_ = Q;
+    R_ = R;
+}
+
+// Setup populates all pre-allocated Sparse MPC matrices
+void SparseFormulation::setup() {
+    int n_step = nu_ + nx_;
+    int n_var = n_ * n_step;
+    int n_dyn = n_ * nx_;
+    int n_constr = n_var + n_dyn;
+
+    // 1. Populate selection matrices Sx and Su
+    Sx_.setZero();
+    Su_.setZero();
+    for (int k = 0; k < n_; ++k) {
+        Sx_.block(k * nx_, k * n_step + nu_, nx_, nx_) = Eigen::MatrixXd::Identity(nx_, nx_);
+        Su_.block(k * nu_, k * n_step, nu_, nu_) = Eigen::MatrixXd::Identity(nu_, nu_);
+    }
+
+    // 2. Populate full Q_full and R_full matrices
+    Q_full_.setZero();
+    R_full_.setZero();
+    for (int k = 0; k < n_; ++k) {
+        Q_full_.block(k * nx_, k * nx_, nx_, nx_) = Q_;
+        R_full_.block(k * nu_, k * nu_, nu_, nu_) = R_;
+    }
+
+    // 3. Populate Hessian H = 2 * (Sx' * Q_full * Sx + Su' * R_full * Su)
+    H_ = 2.0 * (Sx_.transpose() * Q_full_ * Sx_ + Su_.transpose() * R_full_ * Su_);
+
+    // 4. Populate Constraint Matrix M
+    M_.setZero();
+    // Top block: Box constraint identity
+    M_.block(0, 0, n_var, n_var) = Eigen::MatrixXd::Identity(n_var, n_var);
+
+    // Bottom block: Dynamics B*u_k + A*x_k - x_{k+1} = 0
+    int dyn_offset = n_var;
+    M_.block(dyn_offset, 0, nx_, nu_) = B_;
+    M_.block(dyn_offset, nu_, nx_, nx_) = -Eigen::MatrixXd::Identity(nx_, nx_);
+
+    for (int k = 1; k < n_; ++k) {
+        int row_idx = dyn_offset + k * nx_;
+        int prev_x_col = (k - 1) * n_step + nu_;
+        int curr_u_col = k * n_step;
+        int curr_x_col = k * n_step + nu_;
+
+        M_.block(row_idx, prev_x_col, nx_, nx_) = A_;
+        M_.block(row_idx, curr_u_col, nx_, nu_) = B_;
+        M_.block(row_idx, curr_x_col, nx_, nx_) = -Eigen::MatrixXd::Identity(nx_, nx_);
+    }
+
+    // 5. Populate Lower and Upper bound vectors l and u
+    l_.setZero();
+    u_.setZero();
+
+    for (int k = 0; k < n_; ++k) {
+        l_.segment(k * n_step, nu_) = u_min_;
+        u_.segment(k * n_step, nu_) = u_max_;
+
+        l_.segment(k * n_step + nu_, nx_) = x_min_;
+        u_.segment(k * n_step + nu_, nx_) = x_max_;
+    }
+
+    l_.segment(dyn_offset + nx_, (n_ - 1) * nx_).setZero();
+    u_.segment(dyn_offset + nx_, (n_ - 1) * nx_).setZero();
+
+    is_setup_ = true;
+    std::cout << "SparseFormulation setup completed (nx=" << nx_ << ", nu=" << nu_ << ", n=" << n_ << ")." << std::endl;
+}
+
+// Sets the current state x0 with dimension assertion
+void SparseFormulation::setCurrentState(const Eigen::VectorXd& x) {
+    assert(x.size() == nx_ && "Current state x vector size must match constructor nx");
+    x_ = x;
+}
+
+// Sets the target reference state x_ref with dimension assertion
+void SparseFormulation::setReferenceState(const Eigen::VectorXd& x_ref) {
+    assert(x_ref.size() == nx_ && "Reference state x_ref vector size must match constructor nx");
+    x_ref_ = x_ref;
+}
+
+// Gets the optimal control input u0
+void SparseFormulation::getOptimalControl(Eigen::VectorXd& u) {
+    u = u_opt_;
+}
+
+// Solves the Sparse MPC problem
+void SparseFormulation::doControl() {
+    if (!is_setup_ || !solver_) {
+        std::cerr << "SparseFormulation doControl() failed: setup() not called!" << std::endl;
+        return;
+    }
+
+    Eigen::VectorXd x_ref_full(n_ * nx_);
+    for (int k = 0; k < n_; ++k) {
+        x_ref_full.segment(k * nx_, nx_) = x_ref_;
+    }
+
+    // Gradient g = -2 * Sx' * Q_full * x_ref_full
+    g_ = -2.0 * Sx_.transpose() * Q_full_ * x_ref_full;
+
+    // Update dynamics equality bound for k=0: B*u0 - x1 = -A*x0
+    int dyn_offset = n_ * (nu_ + nx_);
+    Eigen::VectorXd step0_rhs = -A_ * x_;
+    l_.segment(dyn_offset, nx_) = step0_rhs;
+    u_.segment(dyn_offset, nx_) = step0_rhs;
+
+    solver_->setHessian(H_);
+    solver_->setGradient(g_);
+    solver_->setConstraintMatrix(M_);
+    solver_->setLowerBound(l_);
+    solver_->setUpperBound(u_);
+
+    solver_->solve();
+
+    Eigen::VectorXd sol = solver_->getSolution();
+    if (sol.size() >= nu_) {
+        u_opt_ = sol.head(nu_);
+    }
+}
+
+// Retrieves predicted state trajectory X over horizon
+void SparseFormulation::getPredictedStates(Eigen::VectorXd& X) {
+    if (!is_setup_ || !solver_) {
+        X.resize(nx_ * n_);
+        X.setZero();
+        return;
+    }
+
+    Eigen::VectorXd sol = solver_->getSolution();
+    int n_step = nu_ + nx_;
+    X.resize(n_ * nx_);
+
+    for (int k = 0; k < n_; ++k) {
+        X.segment(k * nx_, nx_) = sol.segment(k * n_step + nu_, nx_);
+    }
+}
