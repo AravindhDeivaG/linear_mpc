@@ -2,17 +2,16 @@
 #include <iostream>
 #include <Eigen/Dense>
 
-void testFormulation(FormulationType type, const std::string& name) {
+void testConvergence(FormulationType type, const std::string& name) {
     std::cout << "\n==========================================" << std::endl;
-    std::cout << "Testing " << name << " Formulation" << std::endl;
+    std::cout << "Testing Convergence: " << name << " Formulation" << std::endl;
     std::cout << "==========================================" << std::endl;
 
-    int horizon = 10;
+    int horizon = 20;
     int nx = 4;
     int nu = 2;
-    double dt = 0.1;
+    double dt = 0.02;
 
-    // Define 2D double-integrator system matrices
     Eigen::MatrixXd A(nx, nx);
     A.setIdentity();
     A(0,2) = dt;
@@ -41,7 +40,6 @@ void testFormulation(FormulationType type, const std::string& name) {
     Eigen::MatrixXd R(nu, nu);
     R.setZero();
 
-    // 1. Initialize MPC Controller with horizon, nx, nu, dt, and formulation type
     MpcController controller(horizon, nx, nu, type);
     controller.setSystemMatrices(A, B);
     controller.setStateLimits(x_min, x_max);
@@ -49,32 +47,33 @@ void testFormulation(FormulationType type, const std::string& name) {
     controller.setCostMatrices(Q, R);
     controller.setup();
 
-    // 2. Set initial state and reference state
     Eigen::VectorXd x(nx);
-    x << 0.0, 0.0, 0.0, 0.0;
-    controller.setCurrentState(x);
+    x << 200.0, 300.0, 0.0, 0.0;
 
     Eigen::VectorXd x_ref(nx);
-    x_ref << 10.0, 10.0, 0.0, 0.0;
+    x_ref << 400.0, 300.0, 0.0, 0.0;
+
     controller.setReferenceState(x_ref);
 
-    // 3. Run control loops
-    controller.doControl();
-    Eigen::VectorXd u_opt;
-    controller.getOptimalControl(u_opt);
-    std::cout << "Optimal control u_opt (Step 1): \n" << u_opt.transpose() << std::endl;
+    for (int step = 0; step < 15; ++step) {
+        controller.setCurrentState(x);
+        controller.doControl();
+        
+        Eigen::VectorXd u;
+        controller.getOptimalControl(u);
 
-    Eigen::VectorXd X_pred;
-    controller.getPredictedStates(X_pred);
-    std::cout << "Predicted X position (Horizon Step 1): (" << X_pred(0) << ", " << X_pred(1) << ")" << std::endl;
+        x(0) += x(2)*dt + 0.5*u(0)*dt*dt;
+        x(1) += x(3)*dt + 0.5*u(1)*dt*dt;
+        x(2) += u(0)*dt;
+        x(3) += u(1)*dt;
+
+        std::cout << "Step " << step + 1 << ": Pos = (" << x(0) << ", " << x(1) 
+                  << ") | u = (" << u(0) << ", " << u(1) << ")" << std::endl;
+    }
 }
 
 int main() {
-    std::cout << "Starting MPC Formulation Comparison Test..." << std::endl;
-
-    testFormulation(FormulationType::DENSE, "DENSE");
-    testFormulation(FormulationType::SPARSE, "SPARSE");
-
-    std::cout << "\nMPC Comparison Test completed successfully!" << std::endl;
+    testConvergence(FormulationType::DENSE, "DENSE");
+    testConvergence(FormulationType::SPARSE, "SPARSE");
     return 0;
 }

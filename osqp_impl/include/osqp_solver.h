@@ -35,12 +35,19 @@ public:
     // Get the primal solution vector x (size n)
     Eigen::VectorXd getSolution() const;
 
+    // Solver diagnostic queries
+    int getStatus() const;
+    int getIterations() const;
+    double getPrimalResidual() const;
+    double getDualResidual() const;
+
 private:
     int m_n; // Number of variables
     int m_m; // Number of constraints
 
     void* m_solver; // void* to avoid exposing OSQP C structs in public headers
     bool m_is_initialized;
+    bool m_matrices_need_update;
 
     // Cache the dense matrices and vectors
     Eigen::MatrixXd m_P;

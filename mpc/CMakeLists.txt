@@ -26,9 +26,28 @@ target_link_libraries(mpc_demo PRIVATE
     imgui_wrapper
 )
 
-# Create the interactive visualization executable
+add_executable(test_diff bin/test_diff.cpp)
+target_link_libraries(test_diff PRIVATE
+    mpc
+    imgui_wrapper
+)
+
+add_executable(test_recorded_state bin/test_recorded_state.cpp)
+target_link_libraries(test_recorded_state PRIVATE
+    mpc
+    imgui_wrapper
+)
+
+# Create the single-solver interactive visualization executable
 add_executable(mpc_viz bin/mpc_viz.cpp)
 target_link_libraries(mpc_viz PRIVATE
+    mpc
+    imgui_wrapper
+)
+
+# Create the dual-solver side-by-side debug visualization executable
+add_executable(debug_mpc_viz bin/debug_mpc_viz.cpp)
+target_link_libraries(debug_mpc_viz PRIVATE
     mpc
     imgui_wrapper
 )

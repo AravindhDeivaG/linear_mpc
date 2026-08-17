@@ -72,3 +72,7 @@ void MpcController::getOptimalControl(Eigen::VectorXd& u) {
 void MpcController::getPredictedStates(Eigen::VectorXd& X) {
     if (formulation_) formulation_->getPredictedStates(X);
 }
+
+void MpcController::getPredictedInputs(Eigen::VectorXd& U) {
+    if (formulation_) formulation_->getPredictedInputs(U);
+}

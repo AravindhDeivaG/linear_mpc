@@ -1,6 +1,7 @@
 #include "sparse_formulation.h"
 #include <iostream>
 #include <cassert>
+#include <cmath>
 
 // Constructor: Pre-allocates memory for all Sparse MPC matrices given n, nx, nu
 SparseFormulation::SparseFormulation(int n, int nx, int nu, double dt)
@@ -107,12 +108,47 @@ void SparseFormulation::setCostMatrices(const Eigen::MatrixXd& Q, const Eigen::M
     R_ = R;
 }
 
-// Setup populates all pre-allocated Sparse MPC matrices
+// Setup populates all pre-allocated Sparse MPC matrices with scaling transformations
 void SparseFormulation::setup() {
     int n_step = nu_ + nx_;
     int n_var = n_ * n_step;
     int n_dyn = n_ * nx_;
     int n_constr = n_var + n_dyn;
+
+    // Compute diagonal scaling transformation vectors
+    Tx_diag_.resize(nx_);
+    Tx_inv_diag_.resize(nx_);
+    for (int i = 0; i < nx_; ++i) {
+        double max_val = std::abs(x_max_(i));
+        if (max_val < 1e-3 || max_val > 1e6) max_val = 1.0;
+        Tx_diag_(i) = 1.0 / max_val;
+        Tx_inv_diag_(i) = max_val;
+    }
+
+    Tu_diag_.resize(nu_);
+    Tu_inv_diag_.resize(nu_);
+    for (int j = 0; j < nu_; ++j) {
+        double max_val = std::abs(u_max_(j));
+        if (max_val < 1e-3 || max_val > 1e6) max_val = 1.0;
+        Tu_diag_(j) = 1.0 / max_val;
+        Tu_inv_diag_(j) = max_val;
+    }
+
+    Eigen::DiagonalMatrix<double, Eigen::Dynamic> Tx(Tx_diag_);
+    Eigen::DiagonalMatrix<double, Eigen::Dynamic> Tx_inv(Tx_inv_diag_);
+    Eigen::DiagonalMatrix<double, Eigen::Dynamic> Tu(Tu_diag_);
+    Eigen::DiagonalMatrix<double, Eigen::Dynamic> Tu_inv(Tu_inv_diag_);
+
+    // Compute scaled system dynamics and cost matrices
+    A_scaled_ = Tx * A_ * Tx_inv;
+    B_scaled_ = Tx * B_ * Tu_inv;
+    Q_scaled_ = Tx_inv * Q_ * Tx_inv;
+    R_scaled_ = Tu_inv * R_ * Tu_inv;
+
+    x_min_scaled_ = Tx * x_min_;
+    x_max_scaled_ = Tx * x_max_;
+    u_min_scaled_ = Tu * u_min_;
+    u_max_scaled_ = Tu * u_max_;
 
     // 1. Populate selection matrices Sx and Su
     Sx_.setZero();
@@ -122,25 +158,25 @@ void SparseFormulation::setup() {
         Su_.block(k * nu_, k * n_step, nu_, nu_) = Eigen::MatrixXd::Identity(nu_, nu_);
     }
 
-    // 2. Populate full Q_full and R_full matrices
+    // 2. Populate full Q_full and R_full matrices using scaled cost
     Q_full_.setZero();
     R_full_.setZero();
     for (int k = 0; k < n_; ++k) {
-        Q_full_.block(k * nx_, k * nx_, nx_, nx_) = Q_;
-        R_full_.block(k * nu_, k * nu_, nu_, nu_) = R_;
+        Q_full_.block(k * nx_, k * nx_, nx_, nx_) = Q_scaled_;
+        R_full_.block(k * nu_, k * nu_, nu_, nu_) = R_scaled_;
     }
 
     // 3. Populate Hessian H = 2 * (Sx' * Q_full * Sx + Su' * R_full * Su)
     H_ = 2.0 * (Sx_.transpose() * Q_full_ * Sx_ + Su_.transpose() * R_full_ * Su_);
 
-    // 4. Populate Constraint Matrix M
+    // 4. Populate Constraint Matrix M using scaled A and B
     M_.setZero();
     // Top block: Box constraint identity
     M_.block(0, 0, n_var, n_var) = Eigen::MatrixXd::Identity(n_var, n_var);
 
-    // Bottom block: Dynamics B*u_k + A*x_k - x_{k+1} = 0
+    // Bottom block: Dynamics B_scaled*u_k + A_scaled*x_k - x_{k+1} = 0
     int dyn_offset = n_var;
-    M_.block(dyn_offset, 0, nx_, nu_) = B_;
+    M_.block(dyn_offset, 0, nx_, nu_) = B_scaled_;
     M_.block(dyn_offset, nu_, nx_, nx_) = -Eigen::MatrixXd::Identity(nx_, nx_);
 
     for (int k = 1; k < n_; ++k) {
@@ -149,8 +185,8 @@ void SparseFormulation::setup() {
         int curr_u_col = k * n_step;
         int curr_x_col = k * n_step + nu_;
 
-        M_.block(row_idx, prev_x_col, nx_, nx_) = A_;
-        M_.block(row_idx, curr_u_col, nx_, nu_) = B_;
+        M_.block(row_idx, prev_x_col, nx_, nx_) = A_scaled_;
+        M_.block(row_idx, curr_u_col, nx_, nu_) = B_scaled_;
         M_.block(row_idx, curr_x_col, nx_, nx_) = -Eigen::MatrixXd::Identity(nx_, nx_);
     }
 
@@ -159,15 +195,18 @@ void SparseFormulation::setup() {
     u_.setZero();
 
     for (int k = 0; k < n_; ++k) {
-        l_.segment(k * n_step, nu_) = u_min_;
-        u_.segment(k * n_step, nu_) = u_max_;
+        l_.segment(k * n_step, nu_) = u_min_scaled_;
+        u_.segment(k * n_step, nu_) = u_max_scaled_;
 
-        l_.segment(k * n_step + nu_, nx_) = x_min_;
-        u_.segment(k * n_step + nu_, nx_) = x_max_;
+        l_.segment(k * n_step + nu_, nx_) = x_min_scaled_;
+        u_.segment(k * n_step + nu_, nx_) = x_max_scaled_;
     }
 
     l_.segment(dyn_offset + nx_, (n_ - 1) * nx_).setZero();
     u_.segment(dyn_offset + nx_, (n_ - 1) * nx_).setZero();
+
+    solver_->setHessian(H_);
+    solver_->setConstraintMatrix(M_);
 
     is_setup_ = true;
     std::cout << "SparseFormulation setup completed (nx=" << nx_ << ", nu=" << nu_ << ", n=" << n_ << ")." << std::endl;
@@ -197,31 +236,41 @@ void SparseFormulation::doControl() {
         return;
     }
 
+    Eigen::VectorXd x_scaled = Tx_diag_.cwiseProduct(x_);
+    Eigen::VectorXd x_ref_scaled = Tx_diag_.cwiseProduct(x_ref_);
+
     Eigen::VectorXd x_ref_full(n_ * nx_);
     for (int k = 0; k < n_; ++k) {
-        x_ref_full.segment(k * nx_, nx_) = x_ref_;
+        x_ref_full.segment(k * nx_, nx_) = x_ref_scaled;
     }
 
     // Gradient g = -2 * Sx' * Q_full * x_ref_full
     g_ = -2.0 * Sx_.transpose() * Q_full_ * x_ref_full;
 
-    // Update dynamics equality bound for k=0: B*u0 - x1 = -A*x0
+    // Update dynamics equality bound for k=0: B_scaled*u0 - x1 = -A_scaled*x0
     int dyn_offset = n_ * (nu_ + nx_);
-    Eigen::VectorXd step0_rhs = -A_ * x_;
+    Eigen::VectorXd step0_rhs = -A_scaled_ * x_scaled;
     l_.segment(dyn_offset, nx_) = step0_rhs;
     u_.segment(dyn_offset, nx_) = step0_rhs;
 
-    solver_->setHessian(H_);
     solver_->setGradient(g_);
-    solver_->setConstraintMatrix(M_);
     solver_->setLowerBound(l_);
     solver_->setUpperBound(u_);
 
     solver_->solve();
 
+    int status = solver_->getStatus();
+    if (status != 1 && status != 2) { // 1 = OSQP_SOLVED, 2 = OSQP_SOLVED_INACCURATE
+        std::cerr << "[SparseFormulation Warning] OSQP did not converge! Status = " << status 
+                  << " | Iterations = " << solver_->getIterations() 
+                  << " | PrimRes = " << solver_->getPrimalResidual() 
+                  << " | DualRes = " << solver_->getDualResidual() << std::endl;
+    }
+
     Eigen::VectorXd sol = solver_->getSolution();
     if (sol.size() >= nu_) {
-        u_opt_ = sol.head(nu_);
+        // Unscale control output: u_opt = Tu_inv * u_scaled
+        u_opt_ = Tu_inv_diag_.cwiseProduct(sol.head(nu_));
     }
 }
 
@@ -238,6 +287,25 @@ void SparseFormulation::getPredictedStates(Eigen::VectorXd& X) {
     X.resize(n_ * nx_);
 
     for (int k = 0; k < n_; ++k) {
-        X.segment(k * nx_, nx_) = sol.segment(k * n_step + nu_, nx_);
+        Eigen::VectorXd x_k_scaled = sol.segment(k * n_step + nu_, nx_);
+        X.segment(k * nx_, nx_) = Tx_inv_diag_.cwiseProduct(x_k_scaled);
+    }
+}
+
+// Retrieves predicted control input trajectory U over horizon
+void SparseFormulation::getPredictedInputs(Eigen::VectorXd& U) {
+    if (!is_setup_ || !solver_) {
+        U.resize(nu_ * n_);
+        U.setZero();
+        return;
+    }
+
+    Eigen::VectorXd sol = solver_->getSolution();
+    int n_step = nu_ + nx_;
+    U.resize(n_ * nu_);
+
+    for (int k = 0; k < n_; ++k) {
+        Eigen::VectorXd u_k_scaled = sol.segment(k * n_step, nu_);
+        U.segment(k * nu_, nu_) = Tu_inv_diag_.cwiseProduct(u_k_scaled);
     }
 }

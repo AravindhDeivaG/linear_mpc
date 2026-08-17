@@ -1,5 +1,5 @@
 #include "imgui_wrapper.h"
-#include <imgui.h> // Include imgui to access IsMouseDown directly
+#include <imgui.h>
 #include <cmath>
 #include "mpc_controller.h"
 #include <chrono>
@@ -17,7 +17,7 @@ int main() {
     float currentY = 300.0f;
 
     // Dimensions & Time step
-    const int horizon = 20;
+    const int horizon = 15;
     const int nx = 4;
     const int nu = 2;
     const double dt = 0.02;
@@ -26,15 +26,12 @@ int main() {
     Eigen::VectorXd x(nx);
     x << currentX, currentY, 0, 0;
 
-    // Reference state
     Eigen::VectorXd x_ref(nx);
     x_ref << targetX, targetY, 0, 0;
 
-    // Control inputs
     Eigen::VectorXd u(nu);
     u << 0, 0;
 
-    // Predicted states trajectory
     Eigen::VectorXd X_pred;
 
     // Define 2D double-integrator system dynamics and constraints
@@ -64,7 +61,7 @@ int main() {
     Q.block(2,2,2,2) = Eigen::MatrixXd::Identity(2,2)*0.1;
 
     Eigen::MatrixXd R(nu, nu);
-    R.setZero();
+    R = Eigen::MatrixXd::Identity(nu, nu) * 1e-3;
 
     // Create and setup MPC controller with pre-allocated dimensions
     MpcController mpc(horizon, nx, nu, FormulationType::SPARSE);
@@ -88,16 +85,15 @@ int main() {
 
         wrapper.beginFrame();
 
-        // 1. Draw the Toggle Button at coordinates (10, 10)
+        // 1. Draw Toggle Button
         wrapper.drawToggleButton(10.0f, 10.0f, "Run MPC Loop", runMpc);
 
-        // 2. Handle Mouse Dragging for the Target Circle (Direct State Check)
+        // 2. Mouse Dragging target
         float mouseX, mouseY;
         wrapper.getMousePos(mouseX, mouseY);
 
         if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             if (!isDragging) {
-                // Check if we clicked within the target circle boundary
                 float dx = mouseX - targetX;
                 float dy = mouseY - targetY;
                 float dist = std::sqrt(dx * dx + dy * dy);
@@ -112,8 +108,6 @@ int main() {
         if (isDragging) {
             targetX = mouseX;
             targetY = mouseY;
-
-            // Set x reference
             x_ref(0) = targetX;
             x_ref(1) = targetY;
         }
@@ -129,23 +123,19 @@ int main() {
             x(2) = x(2) + u(0)*dt;
             x(3) = x(3) + u(1)*dt;
 
-            // Get predicted states
             mpc.getPredictedStates(X_pred);
         }
 
         // 4. Render circles
-        // Target: light larger circle (semi-transparent pinkish-red)
         currentX = x(0);
         currentY = x(1);
         wrapper.drawSolidCircle(targetX, targetY, targetRadius, 255, 130, 130, 150);
-
-        // Current state: dark medium-sized circle (opaque navy blue)
         wrapper.drawSolidCircle(currentX, currentY, currentRadius, 20, 50, 100, 255);
 
-        // Draw predicted trajectory as bright cyan small hollow circles
+        // Draw predicted trajectory
         if (runMpc && X_pred.size() > 0) {
-            int horizon = mpc.getHorizon();
-            for (int i = 0; i < horizon; ++i) {
+            int h = mpc.getHorizon();
+            for (int i = 0; i < h; ++i) {
                 float px = X_pred(4 * i);
                 float py = X_pred(4 * i + 1);
                 wrapper.drawHollowCircle(px, py, 4.0f, 0, 255, 255, 255);

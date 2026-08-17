@@ -19,6 +19,7 @@ public:
     virtual void doControl() = 0;
     virtual void getOptimalControl(Eigen::VectorXd& u) = 0;
     virtual void getPredictedStates(Eigen::VectorXd& X) = 0;
+    virtual void getPredictedInputs(Eigen::VectorXd& U) = 0;
 };
 
 #endif // MPC_FORMULATION_H

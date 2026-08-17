@@ -156,6 +156,8 @@ void DenseFormulation::setup() {
     }
 
     is_setup_ = true;
+    solver_->setHessian(H_);
+    solver_->setConstraintMatrix(M_);
     std::cout << "DenseFormulation setup completed (nx=" << nx_ << ", nu=" << nu_ << ", n=" << n_ << ")." << std::endl;
 }
 
@@ -191,13 +193,20 @@ void DenseFormulation::doControl() {
     l_.block(n_var, 0, nx_ * n_, 1) = -Sx_ * x_ + state_projector_ * x_min_;
     u_.block(n_var, 0, nx_ * n_, 1) = -Sx_ * x_ + state_projector_ * x_max_;
 
-    solver_->setHessian(H_);
     solver_->setGradient(g_);
-    solver_->setConstraintMatrix(M_);
     solver_->setLowerBound(l_);
     solver_->setUpperBound(u_);
 
     solver_->solve();
+
+    int status = solver_->getStatus();
+    if (status != 1 && status != 2) {
+        std::cerr << "[DenseFormulation Warning] OSQP did not converge! Status = " << status 
+                  << " | Iterations = " << solver_->getIterations() 
+                  << " | PrimRes = " << solver_->getPrimalResidual() 
+                  << " | DualRes = " << solver_->getDualResidual() << std::endl;
+    }
+
     Eigen::VectorXd sol = solver_->getSolution();
     if (sol.size() >= nu_) {
         u_opt_ = sol.head(nu_);
@@ -213,4 +222,14 @@ void DenseFormulation::getPredictedStates(Eigen::VectorXd& X) {
     }
     Eigen::VectorXd U_full = solver_->getSolution();
     X = Sx_ * x_ + Su_ * U_full;
+}
+
+// Returns predicted control inputs over horizon
+void DenseFormulation::getPredictedInputs(Eigen::VectorXd& U) {
+    if (!is_setup_ || !solver_) {
+        U.resize(nu_ * n_);
+        U.setZero();
+        return;
+    }
+    U = solver_->getSolution();
 }

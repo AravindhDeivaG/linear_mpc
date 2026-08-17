@@ -35,6 +35,7 @@ public:
     void doControl();
     void getOptimalControl(Eigen::VectorXd& u);
     void getPredictedStates(Eigen::VectorXd& X);
+    void getPredictedInputs(Eigen::VectorXd& U);
 
 private:
     int n_;

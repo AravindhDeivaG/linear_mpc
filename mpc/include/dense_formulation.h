@@ -25,6 +25,7 @@ public:
     void doControl() override;
     void getOptimalControl(Eigen::VectorXd& u) override;
     void getPredictedStates(Eigen::VectorXd& X) override;
+    void getPredictedInputs(Eigen::VectorXd& U) override;
 
 private:
     int n_;

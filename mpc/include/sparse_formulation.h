@@ -24,6 +24,7 @@ public:
     void doControl() override;
     void getOptimalControl(Eigen::VectorXd& u) override;
     void getPredictedStates(Eigen::VectorXd& X) override;
+    void getPredictedInputs(Eigen::VectorXd& U) override;
 
 private:
     int n_;
@@ -48,6 +49,15 @@ private:
     Eigen::VectorXd x_;
     Eigen::VectorXd x_ref_;
     Eigen::VectorXd u_opt_;
+
+    // Pre-conditioning / Scaling transformations
+    Eigen::VectorXd Tx_diag_, Tu_diag_;
+    Eigen::VectorXd Tx_inv_diag_, Tu_inv_diag_;
+    Eigen::MatrixXd A_scaled_, B_scaled_;
+    Eigen::MatrixXd Q_scaled_, R_scaled_;
+    Eigen::VectorXd x_min_scaled_, x_max_scaled_;
+    Eigen::VectorXd u_min_scaled_, u_max_scaled_;
+
     bool is_setup_;
 };
 
