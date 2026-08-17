@@ -20,7 +20,7 @@ int main() {
     float currentY = 300.0f;
 
     // Dimensions & Time step
-    const int horizon = 10;
+    const int horizon = 15;
     const int nx = 4;
     const int nu = 2;
     const double dt = 0.02;
