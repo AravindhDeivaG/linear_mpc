@@ -5,7 +5,7 @@ osqp:
   time_threshold_ms: 1.0     # Time limit for warning threshold in milliseconds
   check_termination: 1       # Evaluate residuals at every iteration (1) or interval
   rho: 1.0                   # ADMM step-size penalty parameter
-  adaptive_rho: false        # Disable adaptive rho adjustments
+  adaptive_rho: true        # Disable adaptive rho adjustments
   eps_abs: 1.0e-3            # Absolute convergence tolerance
   eps_rel: 1.0e-3            # Relative convergence tolerance
   max_iter: 4000             # Maximum ADMM iterations

@@ -84,6 +84,10 @@ Interleaves inputs and states inside the decision vector $z = [u_0^T, x_1^T, u_1
 * **Issue**: Under high-velocity motion near active bounds, the dual residual converged very quickly while the primal residual converged slowly, causing ADMM iterations to stall or hit maximum iteration limits.
 * **Fix**: Optimized the ADMM penalty step-size parameter $\rho$. Increasing $\rho$ penalizes primal constraint violations more heavily per iteration, accelerating primal residual reduction so that optimal convergence is reached much faster.
 
+### 3. Dense Formulation Sensitivity to Fixed Step-Size ($\rho$)
+* **Issue**: Dense formulation matrices have full, non-diagonal Hessian structures compared to sparse formulations. When running Dense MPC with a fixed step-size (`adaptive_rho: false`), the primal residual hits tolerance (< 1e-3) instantly while the dual residual stagnates at a large value (~60-70), causing OSQP to stall for thousands of iterations. Sparse formulation converges robustly under both fixed and adaptive $\rho$.
+* **Fix**: Enabled `adaptive_rho: true` in `osqp_params.yaml`. Adaptive $\rho$ dynamically rebalances the step-size parameter based on the ratio of primal to dual residuals ($r_{\text{prim}} / r_{\text{dual}}$), collapsing the dual residual and enabling Dense MPC to converge in ~20 iterations.
+
 ---
 
 ## Usage Example
