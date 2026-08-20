@@ -46,6 +46,7 @@ bool OsqpConfig::loadFromYaml(const std::string& filepath) {
         else if (key == "eps_abs") eps_abs = std::stod(val);
         else if (key == "eps_rel") eps_rel = std::stod(val);
         else if (key == "max_iter") max_iter = std::stoi(val);
+        else if (key == "polishing") polishing = parse_bool(val);
     }
     return true;
 }
@@ -141,24 +142,16 @@ class OsqpScopedTimer {
 public:
     OsqpScopedTimer(const OSQPSolver* solver, bool enable = false, double threshold_ms = 1.0)
         : m_solver(solver), m_enable(enable), m_threshold_ms(threshold_ms), 
-          m_start(std::chrono::high_resolution_clock::now()), m_update_done(m_start) {}
-
-    void markUpdateDone() {
-        m_update_done = std::chrono::high_resolution_clock::now();
-    }
+          m_start(std::chrono::high_resolution_clock::now()) {}
 
     ~OsqpScopedTimer() {
         if (!m_enable) return;
         auto end = std::chrono::high_resolution_clock::now();
-        double total_ms = std::chrono::duration<double, std::milli>(end - m_start).count();
-        if (total_ms > m_threshold_ms) {
-            double update_ms = std::chrono::duration<double, std::milli>(m_update_done - m_start).count();
-            double solve_ms = std::chrono::duration<double, std::milli>(end - m_update_done).count();
+        double solve_ms = std::chrono::duration<double, std::milli>(end - m_start).count();
+        if (solve_ms > m_threshold_ms) {
             int iters = (m_solver && m_solver->info) ? m_solver->info->iter : 0;
-            std::cout << "[OsqpSolver Performance Warning] Total solve took " << total_ms 
-                      << " ms (> " << m_threshold_ms << " ms limit!) | Setup/Vector Update: " << update_ms 
-                      << " ms | OSQP Engine Solve: " << solve_ms 
-                      << " ms | Iterations: " << iters << std::endl;
+            std::cout << "[OsqpEngine Performance Warning] osqp_solve engine took " << solve_ms 
+                      << " ms (> " << m_threshold_ms << " ms limit!) | Iterations: " << iters << std::endl;
         }
     }
 
@@ -167,13 +160,11 @@ private:
     bool m_enable;
     double m_threshold_ms;
     std::chrono::high_resolution_clock::time_point m_start;
-    std::chrono::high_resolution_clock::time_point m_update_done;
 };
 }
 
 bool OsqpSolver::solve() {
     OSQPSolver* solver = static_cast<OSQPSolver*>(m_solver);
-    OsqpScopedTimer timer(solver, m_config.enable_timing, m_config.time_threshold_ms);
 
     if (!m_is_initialized) {
         if (m_P.rows() != m_n || m_P.cols() != m_n) {
@@ -193,19 +184,23 @@ bool OsqpSolver::solve() {
         }
 
         m_P_sparse.resize(m_n, m_n);
-        m_P_sparse.reserve(Eigen::VectorXi::Constant(m_n, m_n));
         for (int col = 0; col < m_n; ++col) {
             for (int row = 0; row <= col; ++row) {
-                m_P_sparse.insert(row, col) = m_P(row, col);
+                double val = m_P(row, col);
+                if (std::abs(val) > 1e-12) {
+                    m_P_sparse.insert(row, col) = val;
+                }
             }
         }
         m_P_sparse.makeCompressed();
 
         m_A_sparse.resize(m_m, m_n);
-        m_A_sparse.reserve(Eigen::VectorXi::Constant(m_n, m_m));
         for (int col = 0; col < m_n; ++col) {
             for (int row = 0; row < m_m; ++row) {
-                m_A_sparse.insert(row, col) = m_A(row, col);
+                double val = m_A(row, col);
+                if (std::abs(val) > 1e-12) {
+                    m_A_sparse.insert(row, col) = val;
+                }
             }
         }
         m_A_sparse.makeCompressed();
@@ -231,6 +226,7 @@ bool OsqpSolver::solve() {
         settings.eps_abs = m_config.eps_abs;
         settings.eps_rel = m_config.eps_rel;
         settings.max_iter = m_config.max_iter;
+        settings.polishing = m_config.polishing ? 1 : 0;
 
         OSQPSolver* solver_temp = nullptr;
         OSQPInt exitflag = osqp_setup(&solver_temp, &P_csc, m_q.data(), &A_csc,
@@ -267,14 +263,17 @@ bool OsqpSolver::solve() {
         osqp_update_data_vec(solver, m_q.data(), m_l.data(), m_u.data());
     }
 
-    timer.markUpdateDone();
     if (m_config.verbose) {
         std::cout << "\n==========================================================================================\n"
                   << "[OsqpSolver] --- STARTING OSQP SOLVE CYCLE ---\n"
                   << "==========================================================================================\n" << std::endl;
     }
 
-    OSQPInt exitflag = osqp_solve(solver);
+    OSQPInt exitflag;
+    {
+        OsqpScopedTimer timer(solver, m_config.enable_timing, m_config.time_threshold_ms);
+        exitflag = osqp_solve(solver);
+    }
     if (exitflag != 0) {
         return false;
     }

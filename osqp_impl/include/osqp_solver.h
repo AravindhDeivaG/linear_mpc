@@ -16,6 +16,7 @@ struct OsqpConfig {
     double eps_abs = 1e-3;
     double eps_rel = 1e-3;
     int max_iter = 4000;
+    bool polishing = false;
 
     bool loadFromYaml(const std::string& filepath);
 };
