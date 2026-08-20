@@ -233,3 +233,31 @@ void DenseFormulation::getPredictedInputs(Eigen::VectorXd& U) {
     }
     U = solver_->getSolution();
 }
+
+int DenseFormulation::getIterations() const {
+    return solver_ ? solver_->getIterations() : 0;
+}
+
+int DenseFormulation::getStatus() const {
+    return solver_ ? solver_->getStatus() : -1;
+}
+
+const char* DenseFormulation::getStatusString() const {
+    return solver_ ? solver_->getStatusString() : "UNINITIALIZED";
+}
+
+double DenseFormulation::getObjectiveValue() const {
+    return solver_ ? solver_->getObjectiveValue() : 0.0;
+}
+
+double DenseFormulation::getPrimalResidual() const {
+    return solver_ ? solver_->getPrimalResidual() : 0.0;
+}
+
+double DenseFormulation::getDualResidual() const {
+    return solver_ ? solver_->getDualResidual() : 0.0;
+}
+
+Eigen::VectorXd DenseFormulation::getRawSolution() const {
+    return solver_ ? solver_->getSolution() : Eigen::VectorXd::Zero(n_ * nu_);
+}

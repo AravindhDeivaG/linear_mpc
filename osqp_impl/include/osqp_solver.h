@@ -4,6 +4,22 @@
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 
+#include <string>
+
+struct OsqpConfig {
+    bool verbose = false;
+    bool enable_timing = false;
+    double time_threshold_ms = 1.0;
+    int check_termination = 1;
+    double rho = 5.0;
+    bool adaptive_rho = false;
+    double eps_abs = 1e-3;
+    double eps_rel = 1e-3;
+    int max_iter = 4000;
+
+    bool loadFromYaml(const std::string& filepath);
+};
+
 class OsqpSolver {
 public:
     // Constructor: sets the dimensions of variables (n) and constraints (m)
@@ -11,6 +27,13 @@ public:
 
     // Destructor: cleans up OSQP solver workspace
     ~OsqpSolver();
+
+    // Configuration & logging options
+    void setConfig(const OsqpConfig& config);
+    bool loadConfig(const std::string& yaml_path);
+    OsqpConfig getConfig() const;
+    void setVerbose(bool verbose);
+    void setLogTiming(bool enable, double threshold_ms = 1.0);
 
     // Set the quadratic objective matrix P (dense size n x n)
     void setHessian(const Eigen::MatrixXd& P);
@@ -27,6 +50,10 @@ public:
     // Set the upper bound constraint vector u (size m)
     void setUpperBound(const Eigen::VectorXd& u);
 
+    // Set initial guess for primal and dual variables (Warm Start)
+    void setWarmStart(const Eigen::VectorXd& x);
+    void setWarmStartDual(const Eigen::VectorXd& y);
+
     // Solve the Quadratic Program
     // Automatically sets up the workspace on the first run, and runs fast updates on subsequent runs.
     // Returns true if solved successfully (optimal or solved inaccurate).
@@ -35,9 +62,14 @@ public:
     // Get the primal solution vector x (size n)
     Eigen::VectorXd getSolution() const;
 
+    // Get the dual solution vector y (size m)
+    Eigen::VectorXd getDualSolution() const;
+
     // Solver diagnostic queries
     int getStatus() const;
+    const char* getStatusString() const;
     int getIterations() const;
+    double getObjectiveValue() const;
     double getPrimalResidual() const;
     double getDualResidual() const;
 
@@ -45,6 +77,7 @@ private:
     int m_n; // Number of variables
     int m_m; // Number of constraints
 
+    OsqpConfig m_config;
     void* m_solver; // void* to avoid exposing OSQP C structs in public headers
     bool m_is_initialized;
     bool m_matrices_need_update;

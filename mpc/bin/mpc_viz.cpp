@@ -17,7 +17,7 @@ int main() {
     float currentY = 300.0f;
 
     // Dimensions & Time step
-    const int horizon = 15;
+    const int horizon = 30;
     const int nx = 4;
     const int nu = 2;
     const double dt = 0.02;
@@ -58,10 +58,10 @@ int main() {
     Eigen::MatrixXd Q(nx, nx);
     Q.setZero();
     Q.block(0,0,2,2) = Eigen::MatrixXd::Identity(2,2)*10.0;
-    Q.block(2,2,2,2) = Eigen::MatrixXd::Identity(2,2)*0.1;
+    Q.block(2,2,2,2) = Eigen::MatrixXd::Identity(2,2)*1.0;
 
     Eigen::MatrixXd R(nu, nu);
-    R = Eigen::MatrixXd::Identity(nu, nu) * 1e-3;
+    R = Eigen::MatrixXd::Identity(nu, nu) * 1e-2;
 
     // Create and setup MPC controller with pre-allocated dimensions
     MpcController mpc(horizon, nx, nu, FormulationType::SPARSE);
@@ -85,8 +85,14 @@ int main() {
 
         wrapper.beginFrame();
 
-        // 1. Draw Toggle Button
-        wrapper.drawToggleButton(10.0f, 10.0f, "Run MPC Loop", runMpc);
+        // 1. Controls & Status Window
+        ImGui::Begin("MPC Controller Info");
+        ImGui::Checkbox("Run MPC Loop", &runMpc);
+        ImGui::Separator();
+        ImGui::Text("Formulation: %s", mpc.getFormulationType() == FormulationType::SPARSE ? "Sparse" : "Dense");
+        ImGui::Text("Solver Iterations: %d", mpc.getIterations());
+        ImGui::Text("Control u0: (%.2f, %.2f)", u(0), u(1));
+        ImGui::End();
 
         // 2. Mouse Dragging target
         float mouseX, mouseY;

@@ -2,44 +2,22 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <string>
+#include <cmath>
+#include <vector>
 #include <Eigen/Dense>
 
-int main() {
-    const int horizon = 15;
+int main(int argc, char** argv) {
+    const int horizon = 10;
     const int nx = 4;
     const int nu = 2;
     const double dt = 0.02;
 
-    Eigen::VectorXd x(nx);
-    x << 200.0, 300.0, 0.0, 0.0;
+    Eigen::VectorXd x_target(nx);
+    x_target << 491.985093, 466.758085, 199.090784, -4.436237;
 
     Eigen::VectorXd x_ref(nx);
-    x_ref << 400.0, 300.0, 0.0, 0.0;
-
-    Eigen::VectorXd u_dense_rec(nu);
-    u_dense_rec.setZero();
-    Eigen::VectorXd u_sparse_rec(nu);
-    u_sparse_rec.setZero();
-
-    // Try reading recorded_state.txt
-    std::ifstream ifs("recorded_state.txt");
-    if (ifs.is_open()) {
-        ifs >> x(0) >> x(1) >> x(2) >> x(3);
-        ifs >> x_ref(0) >> x_ref(1) >> x_ref(2) >> x_ref(3);
-        ifs >> u_dense_rec(0) >> u_dense_rec(1);
-        ifs >> u_sparse_rec(0) >> u_sparse_rec(1);
-        ifs.close();
-        std::cout << "[SUCCESS] Loaded snapshot from recorded_state.txt" << std::endl;
-    } else {
-        std::cout << "[INFO] recorded_state.txt not found. Using default test state." << std::endl;
-    }
-
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "\n==========================================" << std::endl;
-    std::cout << "NUMERICAL DIAGNOSTIC FOR RECORDED STATE" << std::endl;
-    std::cout << "==========================================" << std::endl;
-    std::cout << "State x:     [" << x.transpose() << "]" << std::endl;
-    std::cout << "State x_ref: [" << x_ref.transpose() << "]" << std::endl;
+    x_ref << 525.000000, 467.000000, 0.000000, 0.000000;
 
     Eigen::MatrixXd A(nx, nx);
     A.setIdentity();
@@ -69,7 +47,13 @@ int main() {
     Eigen::MatrixXd R(nu, nu);
     R = Eigen::MatrixXd::Identity(nu, nu) * 1e-3;
 
-    // 1. Solve Dense
+    std::cout << std::fixed << std::setprecision(6);
+    std::cout << "\n==========================================================================================================" << std::endl;
+    std::cout << "COLD SOLVE (ONE SHOT) VS WARM-STARTED SOLVE COMPARISON FOR TARGET STATE" << std::endl;
+    std::cout << "Target State x: [" << x_target.transpose() << "]" << std::endl;
+    std::cout << "==========================================================================================================" << std::endl;
+
+    // 1. Dense MPC Reference
     MpcController dense_mpc(horizon, nx, nu, FormulationType::DENSE);
     dense_mpc.setSystemMatrices(A, B);
     dense_mpc.setStateLimits(x_min, x_max);
@@ -77,62 +61,66 @@ int main() {
     dense_mpc.setCostMatrices(Q, R);
     dense_mpc.setup();
 
-    dense_mpc.setCurrentState(x);
+    dense_mpc.setCurrentState(x_target);
     dense_mpc.setReferenceState(x_ref);
     dense_mpc.doControl();
 
-    Eigen::VectorXd u_dense, X_dense, U_dense;
+    Eigen::VectorXd u_dense;
     dense_mpc.getOptimalControl(u_dense);
-    dense_mpc.getPredictedStates(X_dense);
-    dense_mpc.getPredictedInputs(U_dense);
 
-    // 2. Solve Sparse
-    MpcController sparse_mpc(horizon, nx, nu, FormulationType::SPARSE);
-    sparse_mpc.setSystemMatrices(A, B);
-    sparse_mpc.setStateLimits(x_min, x_max);
-    sparse_mpc.setInputLimits(u_min, u_max);
-    sparse_mpc.setCostMatrices(Q, R);
-    sparse_mpc.setup();
+    std::cout << "Dense MPC Reference u0:              (" << std::setw(10) << u_dense(0) << ", " << std::setw(10) << u_dense(1) << ")" << std::endl;
+    std::cout << "----------------------------------------------------------------------------------------------------------" << std::endl;
 
-    sparse_mpc.setCurrentState(x);
-    sparse_mpc.setReferenceState(x_ref);
-    sparse_mpc.doControl();
+    // 2. Sparse MPC: ONE SHOT (COLD SOLVE)
+    MpcController sparse_cold(horizon, nx, nu, FormulationType::SPARSE);
+    sparse_cold.setSystemMatrices(A, B);
+    sparse_cold.setStateLimits(x_min, x_max);
+    sparse_cold.setInputLimits(u_min, u_max);
+    sparse_cold.setCostMatrices(Q, R);
+    sparse_cold.setup();
 
-    Eigen::VectorXd u_sparse, X_sparse, U_sparse;
-    sparse_mpc.getOptimalControl(u_sparse);
-    sparse_mpc.getPredictedStates(X_sparse);
-    sparse_mpc.getPredictedInputs(U_sparse);
+    sparse_cold.setCurrentState(x_target);
+    sparse_cold.setReferenceState(x_ref);
+    sparse_cold.doControl();
 
-    std::cout << "\n==========================================" << std::endl;
-    std::cout << "SOLVER FIRST STEP INPUT u0:" << std::endl;
-    std::cout << "==========================================" << std::endl;
-    std::cout << "Dense  u0: (" << u_dense(0) << ", " << u_dense(1) << ")" << std::endl;
-    std::cout << "Sparse u0: (" << u_sparse(0) << ", " << u_sparse(1) << ")" << std::endl;
-    std::cout << "u0 Norm Diff: " << (u_dense - u_sparse).norm() << std::endl;
+    Eigen::VectorXd u_sparse_cold;
+    sparse_cold.getOptimalControl(u_sparse_cold);
 
-    std::cout << "\n==========================================" << std::endl;
-    std::cout << "PREDICTED CONTROL INPUTS OVER HORIZON (U_dense vs U_sparse):" << std::endl;
-    std::cout << "==========================================" << std::endl;
-    for (int k = 0; k < horizon; ++k) {
-        double du0 = U_dense(2*k) - U_sparse(2*k);
-        double du1 = U_dense(2*k+1) - U_sparse(2*k+1);
-        std::cout << "Step k=" << std::setw(2) << k 
-                  << " | Dense u: (" << std::setw(10) << U_dense(2*k) << ", " << std::setw(10) << U_dense(2*k+1) << ")"
-                  << " | Sparse u: (" << std::setw(10) << U_sparse(2*k) << ", " << std::setw(10) << U_sparse(2*k+1) << ")"
-                  << " | Diff: (" << std::setw(10) << du0 << ", " << std::setw(10) << du1 << ")" << std::endl;
-    }
+    std::cout << "Sparse MPC - ONE SHOT (Cold Solve) u0: (" << std::setw(10) << u_sparse_cold(0) << ", " << std::setw(10) << u_sparse_cold(1) 
+              << ") | Iter: " << std::setw(3) << sparse_cold.getIterations()
+              << " | Diff vs Dense: " << (u_dense - u_sparse_cold).norm() << std::endl;
 
-    std::cout << "\n==========================================" << std::endl;
-    std::cout << "PREDICTED STATES OVER HORIZON (X_dense vs X_sparse):" << std::endl;
-    std::cout << "==========================================" << std::endl;
-    for (int k = 0; k < horizon; ++k) {
-        double dx_pos = X_dense(4*k) - X_sparse(4*k);
-        double dy_pos = X_dense(4*k+1) - X_sparse(4*k+1);
-        std::cout << "Step k=" << std::setw(2) << k + 1 
-                  << " | Dense X: (" << std::setw(9) << X_dense(4*k) << ", " << std::setw(9) << X_dense(4*k+1) << ")"
-                  << " | Sparse X: (" << std::setw(9) << X_sparse(4*k) << ", " << std::setw(9) << X_sparse(4*k+1) << ")"
-                  << " | Diff: (" << std::setw(9) << dx_pos << ", " << std::setw(9) << dy_pos << ")" << std::endl;
-    }
+    // 3. Sparse MPC: WARM-STARTED CHAIN SOLVE
+    MpcController sparse_warm(horizon, nx, nu, FormulationType::SPARSE);
+    sparse_warm.setSystemMatrices(A, B);
+    sparse_warm.setStateLimits(x_min, x_max);
+    sparse_warm.setInputLimits(u_min, u_max);
+    sparse_warm.setCostMatrices(Q, R);
+    sparse_warm.setup();
+
+    // Sequence of previous states
+    Eigen::VectorXd s1(nx), s2(nx), s3(nx);
+    s1 << 471.999854, 470.983781, 200.003954, -35.571769;
+    s2 << 475.999929, 470.285123, 200.003546, -34.294094;
+    s3 << 487.996425, 466.877997, 199.775954, -7.554958;
+
+    sparse_warm.setCurrentState(s1); sparse_warm.setReferenceState(x_ref); sparse_warm.doControl();
+    sparse_warm.setCurrentState(s2); sparse_warm.setReferenceState(x_ref); sparse_warm.doControl();
+    sparse_warm.setCurrentState(s3); sparse_warm.setReferenceState(x_ref); sparse_warm.doControl();
+
+    // Now solve target state with warm start buffer
+    sparse_warm.setCurrentState(x_target);
+    sparse_warm.setReferenceState(x_ref);
+    sparse_warm.doControl();
+
+    Eigen::VectorXd u_sparse_warm;
+    sparse_warm.getOptimalControl(u_sparse_warm);
+
+    std::cout << "Sparse MPC - WARM-STARTED Solve u0:    (" << std::setw(10) << u_sparse_warm(0) << ", " << std::setw(10) << u_sparse_warm(1) 
+              << ") | Iter: " << std::setw(3) << sparse_warm.getIterations()
+              << " | Diff vs Dense: " << (u_dense - u_sparse_warm).norm() << std::endl;
+
+    std::cout << "==========================================================================================================" << std::endl;
 
     return 0;
 }

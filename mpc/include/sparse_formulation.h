@@ -25,6 +25,13 @@ public:
     void getOptimalControl(Eigen::VectorXd& u) override;
     void getPredictedStates(Eigen::VectorXd& X) override;
     void getPredictedInputs(Eigen::VectorXd& U) override;
+    int getIterations() const override;
+    int getStatus() const override;
+    const char* getStatusString() const override;
+    double getObjectiveValue() const override;
+    double getPrimalResidual() const override;
+    double getDualResidual() const override;
+    Eigen::VectorXd getRawSolution() const override;
 
 private:
     int n_;

@@ -76,3 +76,31 @@ void MpcController::getPredictedStates(Eigen::VectorXd& X) {
 void MpcController::getPredictedInputs(Eigen::VectorXd& U) {
     if (formulation_) formulation_->getPredictedInputs(U);
 }
+
+int MpcController::getIterations() const {
+    return formulation_ ? formulation_->getIterations() : 0;
+}
+
+int MpcController::getStatus() const {
+    return formulation_ ? formulation_->getStatus() : -1;
+}
+
+const char* MpcController::getStatusString() const {
+    return formulation_ ? formulation_->getStatusString() : "UNINITIALIZED";
+}
+
+double MpcController::getObjectiveValue() const {
+    return formulation_ ? formulation_->getObjectiveValue() : 0.0;
+}
+
+double MpcController::getPrimalResidual() const {
+    return formulation_ ? formulation_->getPrimalResidual() : 0.0;
+}
+
+double MpcController::getDualResidual() const {
+    return formulation_ ? formulation_->getDualResidual() : 0.0;
+}
+
+Eigen::VectorXd MpcController::getRawSolution() const {
+    return formulation_ ? formulation_->getRawSolution() : Eigen::VectorXd::Zero(0);
+}

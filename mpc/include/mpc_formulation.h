@@ -20,6 +20,13 @@ public:
     virtual void getOptimalControl(Eigen::VectorXd& u) = 0;
     virtual void getPredictedStates(Eigen::VectorXd& X) = 0;
     virtual void getPredictedInputs(Eigen::VectorXd& U) = 0;
+    virtual int getIterations() const = 0;
+    virtual int getStatus() const = 0;
+    virtual const char* getStatusString() const = 0;
+    virtual double getObjectiveValue() const = 0;
+    virtual double getPrimalResidual() const = 0;
+    virtual double getDualResidual() const = 0;
+    virtual Eigen::VectorXd getRawSolution() const = 0;
 };
 
 #endif // MPC_FORMULATION_H

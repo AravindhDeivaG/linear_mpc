@@ -36,6 +36,13 @@ public:
     void getOptimalControl(Eigen::VectorXd& u);
     void getPredictedStates(Eigen::VectorXd& X);
     void getPredictedInputs(Eigen::VectorXd& U);
+    int getIterations() const;
+    int getStatus() const;
+    const char* getStatusString() const;
+    double getObjectiveValue() const;
+    double getPrimalResidual() const;
+    double getDualResidual() const;
+    Eigen::VectorXd getRawSolution() const;
 
 private:
     int n_;

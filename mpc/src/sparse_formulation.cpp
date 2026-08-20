@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cassert>
 #include <cmath>
+#include <chrono>
 
 // Constructor: Pre-allocates memory for all Sparse MPC matrices given n, nx, nu
 SparseFormulation::SparseFormulation(int n, int nx, int nu, double dt)
@@ -145,6 +146,13 @@ void SparseFormulation::setup() {
     Q_scaled_ = Tx_inv * Q_ * Tx_inv;
     R_scaled_ = Tu_inv * R_ * Tu_inv;
 
+    // Normalize cost scaling factor so Hessian entries remain O(1) to O(10)
+    double max_q = Q_scaled_.cwiseAbs().maxCoeff();
+    if (max_q > 10.0) {
+        Q_scaled_ /= (max_q / 10.0);
+        R_scaled_ /= (max_q / 10.0);
+    }
+
     x_min_scaled_ = Tx * x_min_;
     x_max_scaled_ = Tx * x_max_;
     u_min_scaled_ = Tu * u_min_;
@@ -253,6 +261,33 @@ void SparseFormulation::doControl() {
     l_.segment(dyn_offset, nx_) = step0_rhs;
     u_.segment(dyn_offset, nx_) = step0_rhs;
 
+    int n_step = nu_ + nx_;
+    Eigen::VectorXd prev_sol = solver_->getSolution();
+
+    if (prev_sol.size() == n_ * n_step && prev_sol.norm() > 1e-6) {
+        Eigen::VectorXd z_shift(n_ * n_step);
+        // Shift step k=0..N-2 forward by 1 time step
+        for (int k = 0; k < n_ - 1; ++k) {
+            z_shift.segment(k * n_step, n_step) = prev_sol.segment((k + 1) * n_step, n_step);
+        }
+        // Last step N-1: replicate input u_{N-2} and integrate state x_N
+        int last_offset = (n_ - 1) * n_step;
+        Eigen::VectorXd u_last = prev_sol.segment((n_ - 2) * n_step, nu_);
+        Eigen::VectorXd x_last_prev = prev_sol.segment((n_ - 1) * n_step + nu_, nx_);
+        Eigen::VectorXd x_next = A_scaled_ * x_last_prev + B_scaled_ * u_last;
+
+        z_shift.segment(last_offset, nu_) = u_last;
+        z_shift.segment(last_offset + nu_, nx_) = x_next;
+
+        solver_->setWarmStart(z_shift);
+
+        // Perform Dual Warm Start using actual previous dual multipliers y
+        Eigen::VectorXd prev_dual = solver_->getDualSolution();
+        if (prev_dual.size() == l_.size()) {
+            solver_->setWarmStartDual(prev_dual);
+        }
+    }
+
     solver_->setGradient(g_);
     solver_->setLowerBound(l_);
     solver_->setUpperBound(u_);
@@ -308,4 +343,32 @@ void SparseFormulation::getPredictedInputs(Eigen::VectorXd& U) {
         Eigen::VectorXd u_k_scaled = sol.segment(k * n_step, nu_);
         U.segment(k * nu_, nu_) = Tu_inv_diag_.cwiseProduct(u_k_scaled);
     }
+}
+
+int SparseFormulation::getIterations() const {
+    return solver_ ? solver_->getIterations() : 0;
+}
+
+int SparseFormulation::getStatus() const {
+    return solver_ ? solver_->getStatus() : -1;
+}
+
+const char* SparseFormulation::getStatusString() const {
+    return solver_ ? solver_->getStatusString() : "UNINITIALIZED";
+}
+
+double SparseFormulation::getObjectiveValue() const {
+    return solver_ ? solver_->getObjectiveValue() : 0.0;
+}
+
+double SparseFormulation::getPrimalResidual() const {
+    return solver_ ? solver_->getPrimalResidual() : 0.0;
+}
+
+double SparseFormulation::getDualResidual() const {
+    return solver_ ? solver_->getDualResidual() : 0.0;
+}
+
+Eigen::VectorXd SparseFormulation::getRawSolution() const {
+    return solver_ ? solver_->getSolution() : Eigen::VectorXd::Zero(n_ * (nu_ + nx_));
 }

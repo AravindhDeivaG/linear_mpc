@@ -1,11 +1,12 @@
 #include "mpc_controller.h"
+#include "osqp_solver.h"
 #include <iostream>
 #include <iomanip>
 #include <cmath>
 #include <Eigen/Dense>
 
 int main() {
-    const int horizon = 10;
+    const int horizon = 15;
     const int nx = 4;
     const int nu = 2;
     const double dt = 0.02;
@@ -38,7 +39,10 @@ int main() {
     Eigen::MatrixXd R(nu, nu);
     R = Eigen::MatrixXd::Identity(nu, nu) * 1e-3;
 
-    // 1. Dense Controller
+    std::cout << "==========================================================================================================" << std::endl;
+    std::cout << "EXAMINING LOG #8 WITH ACTIVE VELOCITY BOUNDS (v_max = 200)" << std::endl;
+    std::cout << "==========================================================================================================" << std::endl;
+
     MpcController dense_mpc(horizon, nx, nu, FormulationType::DENSE);
     dense_mpc.setSystemMatrices(A, B);
     dense_mpc.setStateLimits(x_min, x_max);
@@ -46,7 +50,6 @@ int main() {
     dense_mpc.setCostMatrices(Q, R);
     dense_mpc.setup();
 
-    // 2. Sparse Controller
     MpcController sparse_mpc(horizon, nx, nu, FormulationType::SPARSE);
     sparse_mpc.setSystemMatrices(A, B);
     sparse_mpc.setStateLimits(x_min, x_max);
@@ -54,51 +57,44 @@ int main() {
     sparse_mpc.setCostMatrices(Q, R);
     sparse_mpc.setup();
 
-    // Initial state: (200, 300, 0, 0), Target: (400, 300, 0, 0)
     Eigen::VectorXd x(nx);
-    x << 200.0, 300.0, 0.0, 0.0;
+    x << 219.599984, 280.400015, 139.999937, -139.999937;
 
     Eigen::VectorXd x_ref(nx);
-    x_ref << 400.0, 300.0, 0.0, 0.0;
+    x_ref << 623.0, 80.0, 0.0, 0.0;
 
-    std::cout << std::fixed << std::setprecision(4);
-    std::cout << "==========================================================================================================" << std::endl;
-    std::cout << "STEP-BY-STEP SIMULATION (x_start = (200, 300), x_target = (400, 300))" << std::endl;
-    std::cout << "==========================================================================================================" << std::endl;
-    std::cout << "Step | State (x, y, vx, vy)                | u_dense (ux, uy)     | u_sparse (ux, uy)    | u_diff" << std::endl;
-    std::cout << "-----+------------------------------------+----------------------+----------------------+---------" << std::endl;
+    std::cout << "Step | State (x, y, vx, vy)                       | Dense (u0, iter)      | Sparse (u0, iter)     | Diff" << std::endl;
+    std::cout << "-----+-------------------------------------------+-----------------------+-----------------------+---------" << std::endl;
 
-    for (int step = 0; step < 30; ++step) {
-        // Solve Dense
+    for (int step = 0; step < 7; ++step) {
         dense_mpc.setCurrentState(x);
         dense_mpc.setReferenceState(x_ref);
         dense_mpc.doControl();
         Eigen::VectorXd u_dense;
         dense_mpc.getOptimalControl(u_dense);
+        int dense_iters = dense_mpc.getIterations();
 
-        // Solve Sparse
         sparse_mpc.setCurrentState(x);
         sparse_mpc.setReferenceState(x_ref);
         sparse_mpc.doControl();
         Eigen::VectorXd u_sparse;
         sparse_mpc.getOptimalControl(u_sparse);
+        int sparse_iters = sparse_mpc.getIterations();
 
         double diff_u = (u_dense - u_sparse).norm();
 
         std::cout << std::setw(4) << step + 1 << " | ("
-                  << std::setw(8) << x(0) << ", " << std::setw(8) << x(1) << ", "
+                  << std::setw(8) << std::fixed << std::setprecision(1) << x(0) << ", " << std::setw(8) << x(1) << ", "
                   << std::setw(7) << x(2) << ", " << std::setw(7) << x(3) << ") | ("
-                  << std::setw(8) << u_dense(0) << ", " << std::setw(8) << u_dense(1) << ") | ("
-                  << std::setw(8) << u_sparse(0) << ", " << std::setw(8) << u_sparse(1) << ") | "
-                  << std::setw(7) << diff_u << std::endl;
+                  << std::setw(7) << std::setprecision(3) << u_dense(0) << ", " << std::setw(7) << u_dense(1) << ", " << std::setw(4) << dense_iters << ") | ("
+                  << std::setw(7) << u_sparse(0) << ", " << std::setw(7) << u_sparse(1) << ", " << std::setw(4) << sparse_iters << ") | "
+                  << std::setw(7) << std::setprecision(4) << diff_u << std::endl;
 
-        // Apply ONLY Sparse control update to physical state
         x(0) += x(2)*dt + 0.5*u_sparse(0)*dt*dt;
         x(1) += x(3)*dt + 0.5*u_sparse(1)*dt*dt;
         x(2) += u_sparse(0)*dt;
         x(3) += u_sparse(1)*dt;
     }
 
-    std::cout << "==========================================================================================================" << std::endl;
     return 0;
 }

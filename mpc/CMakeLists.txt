@@ -38,6 +38,30 @@ target_link_libraries(test_recorded_state PRIVATE
     imgui_wrapper
 )
 
+add_executable(test_cost_eval bin/test_cost_eval.cpp)
+target_link_libraries(test_cost_eval PRIVATE
+    mpc
+    imgui_wrapper
+)
+
+add_executable(test_1d_toy bin/test_1d_toy.cpp)
+target_link_libraries(test_1d_toy PRIVATE
+    mpc
+    imgui_wrapper
+)
+
+add_executable(test_warmstart_breakdown bin/test_warmstart_breakdown.cpp)
+target_link_libraries(test_warmstart_breakdown PRIVATE
+    mpc
+    imgui_wrapper
+)
+
+add_executable(test_log8_details bin/test_log8_details.cpp)
+target_link_libraries(test_log8_details PRIVATE
+    mpc
+    imgui_wrapper
+)
+
 # Create the single-solver interactive visualization executable
 add_executable(mpc_viz bin/mpc_viz.cpp)
 target_link_libraries(mpc_viz PRIVATE
